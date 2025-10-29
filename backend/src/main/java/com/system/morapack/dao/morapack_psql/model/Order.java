@@ -26,11 +26,11 @@ public class Order {
   @Column(name = "name", nullable = false)
   private String name;
 
-  @OneToOne(fetch = FetchType.LAZY, optional = false)
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "origin_city_id", nullable = false)
   private City origin;
 
-  @OneToOne(fetch = FetchType.LAZY, optional = false)
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "destination_city_id", nullable = false)
   private City destination;
 

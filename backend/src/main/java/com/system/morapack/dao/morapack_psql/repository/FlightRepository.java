@@ -23,6 +23,8 @@ public interface FlightRepository extends JpaRepository<Flight, Integer> {
   List<Flight> findByDestinationAirport_Id(Integer destinationAirportId);
 
   List<Flight> findByStatus(String status);
+  long countByStatus(String status);
+
   List<Flight> findByMaxCapacityGreaterThanEqual(Integer capacity);
   List<Flight> findByTransportTimeDaysBetween(Double min, Double max);
   List<Flight> findByDailyFrequencyBetween(Integer min, Integer max);

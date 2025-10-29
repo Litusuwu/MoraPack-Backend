@@ -38,6 +38,7 @@ public class ProductTracker {
                 // Create default product for orders without explicit products
                 ProductSchema defaultProduct = new ProductSchema();
                 defaultProduct.setId(order.getId() * 1000); // Derive product ID from order ID
+                defaultProduct.setOrderId(order.getId()); // SET ORDER ID!
                 defaultProduct.setStatus(Status.NOT_ASSIGNED);
 
                 ArrayList<ProductSchema> products = new ArrayList<>();
@@ -50,6 +51,10 @@ public class ProductTracker {
                 // Map existing products
                 orderToProductsMap.put(order.getId(), order.getProductSchemas());
                 for (ProductSchema product : order.getProductSchemas()) {
+                    // Ensure each product has the orderId set
+                    if (product.getOrderId() == null) {
+                        product.setOrderId(order.getId());
+                    }
                     productToOrderMap.put(product.getId(), order);
                 }
             }

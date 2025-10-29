@@ -92,4 +92,12 @@ public class FlightAPI {
     flightController.deleteFlight(id);
     return ResponseEntity.noContent().build();
   }
+
+  @GetMapping("/count")
+  public ResponseEntity<Long> countFlights(@RequestParam(required = false) String status) {
+    if (status != null) {
+      return ResponseEntity.ok(flightController.countFlightsByStatus(status));
+    }
+    return ResponseEntity.ok(flightController.countAllFlights());
+  }
 }

@@ -51,12 +51,16 @@ public class InputData {
                     AirportSchema destinationAirportSchema = airportMap.get(destinationCode);
                     
                     if (originAirportSchema != null && destinationAirportSchema != null) {
+                        // Parse departure and arrival times
+                        LocalTime departureLocalTime = parseTime(departureTime);
+                        LocalTime arrivalLocalTime = parseTime(arrivalTime);
+
                         // Calculate transport time in hours
                         double transportTime = calculateTransportTime(departureTime, arrivalTime);
-                        
+
                         // Calculate cost (this is a placeholder - you might want to implement a more sophisticated cost model)
                         double cost = calculateFlightCost(originAirportSchema, destinationAirportSchema, maxCapacity);
-                        
+
                         // Create FlightSchema object
                         FlightSchema flightSchema = new FlightSchema();
                         flightSchema.setId(flightId++);
@@ -67,7 +71,11 @@ public class InputData {
                         flightSchema.setUsedCapacity(0);
                         flightSchema.setTransportTime(transportTime);
                         flightSchema.setCost(cost);
-                        
+
+                        // Store the actual departure and arrival times from flights.txt
+                        flightSchema.setDepartureTime(departureLocalTime);
+                        flightSchema.setArrivalTime(arrivalLocalTime);
+
                         flightSchemas.add(flightSchema);
                     }
                 }

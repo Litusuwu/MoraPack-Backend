@@ -154,4 +154,12 @@ public class FlightAdapter {
   public void bulkDeleteFlights(List<Integer> ids) {
     flightService.bulkDelete(ids);
   }
+
+  public long countAllFlights() {
+    return flightService.countAll();
+  }
+
+  public long countFlightsByStatus(String status) {
+    return flightService.countByStatus(status);
+  }
 }

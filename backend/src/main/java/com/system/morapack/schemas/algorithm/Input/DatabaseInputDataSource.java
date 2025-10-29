@@ -6,7 +6,6 @@ import com.system.morapack.dao.morapack_psql.model.Customer;
 import com.system.morapack.dao.morapack_psql.model.Flight;
 import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.Product;
-import com.system.morapack.dao.morapack_psql.model.Warehouse;
 import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
@@ -16,12 +15,9 @@ import com.system.morapack.schemas.CitySchema;
 import com.system.morapack.schemas.CustomerSchema;
 import com.system.morapack.schemas.FlightSchema;
 import com.system.morapack.schemas.OrderSchema;
-import com.system.morapack.schemas.PackageStatus;
 import com.system.morapack.schemas.ProductSchema;
 import com.system.morapack.schemas.Status;
 import com.system.morapack.schemas.WarehouseSchema;
-
-import com.system.morapack.bll.adapter.WarehouseAdapter;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -255,6 +251,11 @@ public class DatabaseInputDataSource implements InputDataSource {
 
         productSchema.setId(product.getId());
         productSchema.setStatus(Status.NOT_ASSIGNED); // Initial status
+        
+        // SET ORDER ID from product's order
+        if (product.getOrder() != null) {
+            productSchema.setOrderId(product.getOrder().getId());
+        }
 
         // Product doesn't have assignedFlight yet (will be set by algorithm)
         productSchema.setAssignedFlight(new StringBuilder());

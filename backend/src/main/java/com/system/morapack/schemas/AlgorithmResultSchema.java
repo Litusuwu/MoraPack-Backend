@@ -26,7 +26,11 @@ public class AlgorithmResultSchema {
     private Double score;
 
     // The main result: map of products to their flight routes
-    private List<ProductRouteSchema> productRoutes;
+    // Using DTO to avoid circular references and reduce JSON size
+    private List<ProductRouteDTO> productRoutes;
+    
+    // Temporal simulation timeline
+    private SimulationTimelineResult timeline;
 
     // Raw solution for debugging (optional)
     private Map<String, Object> rawSolution;

@@ -8,5 +8,6 @@ import lombok.*;
 public class CitySchema {
   private Integer id;
   private String name;
+  private String country;
   private Continent continent;
 }
