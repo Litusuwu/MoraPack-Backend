@@ -119,6 +119,7 @@ public class InputProducts {
                         for (int i = 0; i < productQuantity; i++) {
                             ProductSchema productSchema = new ProductSchema();
                             productSchema.setId(productId++);
+                            productSchema.setOrderId(packageId - 1); // SET ORDER ID! (packageId was already incremented)
                             productSchema.setStatus(Status.NOT_ASSIGNED); // ProductSchema not assigned initially
                             productSchemas.add(productSchema);
                         }

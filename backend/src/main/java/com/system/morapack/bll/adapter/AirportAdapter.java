@@ -21,9 +21,11 @@ public class AirportAdapter {
   private final AirportService airportService;
   private final CityService cityService;
   private final WarehouseService warehouseService;
+  private final CityAdapter cityAdapter;
+  private final WarehouseAdapter warehouseAdapter;
 
   private AirportSchema mapToSchema(Airport airport) {
-    return AirportSchema.builder()
+    AirportSchema.AirportSchemaBuilder builder = AirportSchema.builder()
         .id(airport.getId())
         .codeIATA(airport.getCodeIATA())
         .alias(airport.getAlias())
@@ -33,8 +35,19 @@ public class AirportAdapter {
         .cityId(airport.getCity() != null ? airport.getCity().getId() : null)
         .cityName(airport.getCity() != null ? airport.getCity().getName() : null)
         .state(airport.getState())
-        .warehouseId(airport.getWarehouse() != null ? airport.getWarehouse().getId() : null)
-        .build();
+        .warehouseId(airport.getWarehouse() != null ? airport.getWarehouse().getId() : null);
+
+    // Include full CitySchema for legacy/algorithm compatibility
+    if (airport.getCity() != null) {
+      builder.citySchema(cityAdapter.getCity(airport.getCity().getId()));
+    }
+
+    // Include full WarehouseSchema with capacity data
+    if (airport.getWarehouse() != null) {
+      builder.warehouse(warehouseAdapter.getWarehouse(airport.getWarehouse().getId()));
+    }
+
+    return builder.build();
   }
 
   private Airport mapToEntity(AirportSchema schema) {

@@ -21,6 +21,9 @@ public class City {
   @Column(name = "name", nullable = false, length = 120)
   private String name;
 
+  @Column(name = "country", length = 120)
+  private String country;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "continent", nullable = false, length = 32)
   private Continent continent;

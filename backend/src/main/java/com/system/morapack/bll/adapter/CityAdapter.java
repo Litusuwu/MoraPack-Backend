@@ -20,6 +20,7 @@ public class CityAdapter {
     return CitySchema.builder()
         .id(city.getId())
         .name(city.getName())
+        .country(city.getCountry())
         .continent(city.getContinent())
         .build();
   }
@@ -28,6 +29,7 @@ public class CityAdapter {
     return City.builder()
         .id(schema.getId())
         .name(schema.getName())
+        .country(schema.getCountry())
         .continent(schema.getContinent())
         .build();
   }

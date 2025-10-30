@@ -659,6 +659,9 @@ public class Solution {
      * Ejecuta el algoritmo ALNS (Adaptive Large Neighborhood Search)
      */
     private void runALNSAlgorithm() {
+      // Tiempo de inicio para tracking de ejecución total
+      long algorithmStartTime = System.currentTimeMillis();
+
       // Obtener la solución actual y su peso
       HashMap<OrderSchema, ArrayList<FlightSchema>> currentSolution = null;
       int currentWeight = Integer.MAX_VALUE;
@@ -784,7 +787,22 @@ public class Solution {
                   stagnationCounter = 0;
                   diversificationMode = false; // Volver a intensificación después de mejora
                   updateUnassignedPool(currentSolution); // Actualizar pool de no asignados
-                  
+
+                  // EARLY STOPPING: Si todos los paquetes están asignados, terminar algoritmo
+                  if (unassignedPool.isEmpty()) {
+                      long executionTime = System.currentTimeMillis() - algorithmStartTime;
+                      System.out.println("\n========================================");
+                      System.out.println("¡EARLY STOPPING! Todos los paquetes asignados exitosamente");
+                      System.out.println("Iteración: " + iteration + " / " + maxIterations);
+                      System.out.println("Peso final: " + bestWeight);
+                      System.out.println("Total de órdenes: " + orderSchemas.size());
+                      System.out.println("Mejoras realizadas: " + improvements);
+                      System.out.println("Tiempo total de ejecución: " + executionTime + " ms (" +
+                                       String.format("%.2f", executionTime/1000.0) + " segundos)");
+                      System.out.println("========================================\n");
+                      break; // Salir del bucle de iteraciones - solución completa encontrada
+                  }
+
                   // CONTROL DE DIVERSIFICACIÓN EXTREMA: Verificar si es mejora significativa
                   if (improvementRatio >= Constants.SIGNIFICANT_IMPROVEMENT_THRESHOLD / 100.0) {
                       // Mejora significativa (≥0.1%) - resetear contador de estancamiento

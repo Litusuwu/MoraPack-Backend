@@ -84,6 +84,10 @@ public class FlightService {
   public List<Flight> getByDailyFrequencyRange(Integer min, Integer max) { return repository.findByDailyFrequencyBetween(min, max); }
   public List<Flight> getByCreatedAtRange(LocalDateTime start, LocalDateTime end) { return repository.findByCreatedAtBetween(start, end); }
 
+  // Count methods
+  public long countAll() { return repository.count(); }
+  public long countByStatus(String status) { return repository.countByStatus(status); }
+
   // Rules
   private void validate(Flight f) {
     if (f.getCode() == null || f.getCode().isBlank()) throw new IllegalArgumentException("code required");

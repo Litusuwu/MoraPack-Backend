@@ -73,4 +73,12 @@ public class FlightController {
   public void bulkDeleteFlights(List<Integer> ids) {
     flightAdapter.bulkDeleteFlights(ids);
   }
+
+  public long countAllFlights() {
+    return flightAdapter.countAllFlights();
+  }
+
+  public long countFlightsByStatus(String status) {
+    return flightAdapter.countFlightsByStatus(status);
+  }
 }
