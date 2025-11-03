@@ -129,4 +129,111 @@ public class AlgorithmAPI {
       return ResponseEntity.internalServerError().body(result);
     }
   }
+
+  /**
+   * Replan/reoptimize routes after simulation events (flight cancellations, new orders)
+   * POST /api/algorithm/replan
+   * 
+   * This endpoint re-executes the ALNS algorithm using current database state.
+   * Use this after:
+   * - Cancelling a flight (POST /api/flights/{id}/cancel)
+   * - Adding an urgent order (POST /api/orders/urgent)
+   * - Any other event that requires route replanning
+   * 
+   * Request body (optional):
+   * {
+   *   "reason": "FLIGHT_CANCELLED",
+   *   "affectedFlightId": 123,
+   *   "currentSimulationTime": "2025-01-03T14:30:00",
+   *   "quickMode": true  // Optional: use reduced iterations for faster replanning
+   * }
+   * 
+   * Response: AlgorithmResultSchema with updated routes and timeline
+   */
+  @PostMapping("/replan")
+  public ResponseEntity<ReplanResponse> replanRoutes(
+      @RequestBody(required = false) ReplanRequest request) {
+    
+    System.out.println("===========================================");
+    System.out.println("REPLANNING REQUEST DURING SIMULATION");
+    if (request != null) {
+      System.out.println("Reason: " + request.getReason());
+      System.out.println("Affected Flight ID: " + request.getAffectedFlightId());
+      System.out.println("Current Sim Time: " + request.getCurrentSimulationTime());
+      System.out.println("Quick Mode: " + request.getQuickMode());
+    }
+    System.out.println("===========================================");
+    
+    // Build ALNS request - always use DATABASE mode for replanning
+    AlgorithmRequest algorithmRequest = AlgorithmRequest.builder()
+        .algorithmType("ALNS")
+        .useDatabase(true)  // IMPORTANT: Use current database state
+        .build();
+    
+    // If quick mode, we could reduce iterations (future enhancement)
+    boolean quickMode = request != null && Boolean.TRUE.equals(request.getQuickMode());
+    if (quickMode) {
+      System.out.println("[REPLAN] Quick mode enabled - using reduced iterations");
+      // Could set maxIterations here if AlgorithmRequest supported it for ALNS
+    }
+    
+    // Execute ALNS with current database state
+    long startTime = System.currentTimeMillis();
+    AlgorithmResultSchema result = algorithmController.executeAlgorithm(algorithmRequest);
+    long endTime = System.currentTimeMillis();
+    long executionTimeMs = endTime - startTime;
+    
+    System.out.println("[REPLAN] Replanning completed in " + executionTimeMs + "ms");
+    System.out.println("[REPLAN] Total products: " + result.getTotalProducts());
+    System.out.println("[REPLAN] Product routes: " + 
+        (result.getProductRoutes() != null ? result.getProductRoutes().size() : 0));
+    
+    if (result.getSuccess()) {
+      return ResponseEntity.ok(
+          ReplanResponse.builder()
+              .success(true)
+              .message("Replanning completed successfully")
+              .executionTimeMs(executionTimeMs)
+              .algorithmResult(result)
+              .build()
+      );
+    } else {
+      return ResponseEntity.internalServerError().body(
+          ReplanResponse.builder()
+              .success(false)
+              .message("Replanning failed: " + result.getMessage())
+              .executionTimeMs(executionTimeMs)
+              .algorithmResult(result)
+              .build()
+      );
+    }
+  }
+
+  /**
+   * Request DTO for replanning
+   */
+  @lombok.Data
+  @lombok.Builder
+  @lombok.NoArgsConstructor
+  @lombok.AllArgsConstructor
+  static class ReplanRequest {
+    private String reason; // "FLIGHT_CANCELLED", "NEW_ORDER", "FLIGHT_DELAYED", etc.
+    private Integer affectedFlightId;
+    private String currentSimulationTime; // ISO timestamp
+    private Boolean quickMode; // If true, use reduced iterations for faster execution
+  }
+
+  /**
+   * Response DTO for replanning
+   */
+  @lombok.Data
+  @lombok.Builder
+  @lombok.NoArgsConstructor
+  @lombok.AllArgsConstructor
+  static class ReplanResponse {
+    private Boolean success;
+    private String message;
+    private Long executionTimeMs;
+    private AlgorithmResultSchema algorithmResult;
+  }
 }

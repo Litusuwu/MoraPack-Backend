@@ -146,11 +146,10 @@ public class DataImportController {
      * Get import status and statistics
      * GET /api/data-import/status
      * 
-     * @return Current counts of airports, flights, orders, and products in database
+     * @return Service status information
      */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getImportStatus() {
-        // This endpoint could be extended to show import statistics
         Map<String, Object> status = new HashMap<>();
         status.put("message", "Data import endpoints are operational");
         status.put("endpoints", Map.of(
@@ -159,6 +158,18 @@ public class DataImportController {
             "orders", "/api/data-import/orders (POST)"
         ));
         return ResponseEntity.ok(status);
+    }
+
+    /**
+     * Get current data counts
+     * GET /api/data-import/counts
+     * 
+     * @return Current counts of airports, flights, orders, and products in database
+     */
+    @GetMapping("/counts")
+    public ResponseEntity<Map<String, Object>> getDataCounts() {
+        Map<String, Object> counts = dataImportService.getDataStatus();
+        return ResponseEntity.ok(counts);
     }
 }
 

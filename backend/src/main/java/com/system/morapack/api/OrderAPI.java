@@ -46,6 +46,52 @@ public class OrderAPI {
     return ResponseEntity.ok(orderController.createOrder(order));
   }
 
+  /**
+   * Add a new urgent order during simulation
+   * POST /api/orders/urgent
+   * 
+   * This endpoint creates a new order with high priority during an active simulation.
+   * The order will have status PENDING and requires replanning.
+   * 
+   * Request body example:
+   * {
+   *   "name": "Urgent Order",
+   *   "originCityId": 1,
+   *   "destinationCityId": 5,
+   *   "deliveryDate": "2025-01-05T18:00:00",
+   *   "customerId": 12345,
+   *   "pickupTimeHours": 2.0
+   * }
+   * 
+   * Response includes the created order and indicates that replanning is needed.
+   */
+  @PostMapping("/urgent")
+  public ResponseEntity<OrderCreationResponse> createUrgentOrder(@RequestBody OrderSchema order) {
+    System.out.println("===========================================");
+    System.out.println("URGENT ORDER CREATION DURING SIMULATION");
+    System.out.println("Destination: " + order.getDestinationCityName());
+    System.out.println("Delivery Date: " + order.getDeliveryDate());
+    System.out.println("===========================================");
+    
+    // Set high priority and PENDING status
+    order.setStatus(PackageStatus.PENDING);
+    order.setPriority(10.0); // High priority
+    
+    // Create the order
+    OrderSchema createdOrder = orderController.createOrder(order);
+    
+    System.out.println("Urgent order created with ID: " + createdOrder.getId());
+    
+    return ResponseEntity.ok(
+        OrderCreationResponse.builder()
+            .success(true)
+            .message("Urgent order created successfully - replanning required")
+            .order(createdOrder)
+            .requiresReplanning(true)
+            .build()
+    );
+  }
+
   @PostMapping("/bulk")
   public ResponseEntity<List<OrderSchema>> createOrders(@RequestBody List<OrderSchema> orders) {
     return ResponseEntity.ok(orderController.bulkCreateOrders(orders));
@@ -67,5 +113,19 @@ public class OrderAPI {
   public ResponseEntity<Void> deleteOrder(@PathVariable Integer id) {
     orderController.deleteOrder(id);
     return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Response DTO for order creation during simulation
+   */
+  @lombok.Data
+  @lombok.Builder
+  @lombok.NoArgsConstructor
+  @lombok.AllArgsConstructor
+  static class OrderCreationResponse {
+    private Boolean success;
+    private String message;
+    private OrderSchema order;
+    private Boolean requiresReplanning;
   }
 }

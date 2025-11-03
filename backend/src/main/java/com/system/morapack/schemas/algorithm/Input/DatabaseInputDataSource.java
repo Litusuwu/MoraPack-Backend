@@ -84,9 +84,10 @@ public class DatabaseInputDataSource implements InputDataSource {
 
     @Override
     public ArrayList<FlightSchema> loadFlights(ArrayList<AirportSchema> airports) {
-        System.out.println("[DATABASE] Loading flights from PostgreSQL via FlightService...");
+        System.out.println("[DATABASE] Loading ACTIVE flights from PostgreSQL via FlightService...");
 
-        List<Flight> flights = flightService.fetch(null); // null = fetch all
+        // Only load flights with status "ACTIVE" - inactive/cancelled flights are excluded
+        List<Flight> flights = flightService.getByStatus("ACTIVE");
         ArrayList<FlightSchema> flightSchemas = new ArrayList<>();
 
         for (Flight flight : flights) {
@@ -96,7 +97,7 @@ public class DatabaseInputDataSource implements InputDataSource {
             }
         }
 
-        System.out.println("[DATABASE] Loaded " + flightSchemas.size() + " flights from database");
+        System.out.println("[DATABASE] Loaded " + flightSchemas.size() + " ACTIVE flights from database");
         return flightSchemas;
     }
 

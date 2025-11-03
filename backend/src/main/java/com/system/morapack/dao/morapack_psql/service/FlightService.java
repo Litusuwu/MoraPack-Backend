@@ -97,7 +97,6 @@ public class FlightService {
     if (f.getDailyFrequency() == null || f.getDailyFrequency() <= 0) throw new IllegalArgumentException("dailyFrequency must be > 0");
     if (f.getStatus() == null || f.getStatus().isBlank()) throw new IllegalArgumentException("status required");
     if (f.getCreatedAt() == null) throw new IllegalArgumentException("createdAt required");
-    if (f.getAirplane() == null) throw new IllegalArgumentException("airplane required");
     if (f.getOriginAirport() == null) throw new IllegalArgumentException("originAirport required");
     if (f.getDestinationAirport() == null) throw new IllegalArgumentException("destinationAirport required");
     if (f.getOriginAirport() != null && f.getDestinationAirport() != null

@@ -2,6 +2,7 @@ package com.system.morapack.api;
 
 import com.system.morapack.bll.controller.FlightController;
 import com.system.morapack.schemas.FlightSchema;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -87,6 +88,94 @@ public class FlightAPI {
     return ResponseEntity.ok(flightController.updateFlight(id, updates));
   }
 
+  /**
+   * Update flight status (e.g., cancel a flight by setting status to "INACTIVE")
+   * PATCH /api/flights/{id}/status
+   * 
+   * Body: { "status": "INACTIVE" } or { "status": "ACTIVE" }
+   */
+  @PatchMapping("/{id}/status")
+  public ResponseEntity<FlightSchema> updateFlightStatus(
+      @PathVariable Integer id,
+      @RequestBody FlightStatusUpdateRequest request) {
+    FlightSchema flight = flightController.getFlight(id);
+    flight.setStatus(request.getStatus());
+    return ResponseEntity.ok(flightController.updateFlight(id, flight));
+  }
+
+  /**
+   * Cancel a flight during simulation
+   * POST /api/flights/{id}/cancel
+   * 
+   * This endpoint:
+   * - Validates the flight exists and can be cancelled
+   * - Sets flight status to INACTIVE/CANCELLED
+   * - Returns updated flight and affected products count
+   * 
+   * Response example:
+   * {
+   *   "success": true,
+   *   "message": "Flight F123 cancelled successfully",
+   *   "flight": { ... },
+   *   "affectedProducts": 25,
+   *   "requiresReplanning": true
+   * }
+   */
+  @PostMapping("/{id}/cancel")
+  public ResponseEntity<FlightCancellationResponse> cancelFlight(
+      @PathVariable Integer id,
+      @RequestBody(required = false) FlightCancellationRequest request) {
+    
+    System.out.println("===========================================");
+    System.out.println("FLIGHT CANCELLATION REQUEST");
+    System.out.println("Flight ID: " + id);
+    if (request != null) {
+      System.out.println("Reason: " + request.getReason());
+      System.out.println("Simulation Time: " + request.getCurrentSimulationTime());
+    }
+    System.out.println("===========================================");
+    
+    // Get the flight
+    FlightSchema flight = flightController.getFlight(id);
+    
+    if (flight == null) {
+      return ResponseEntity.badRequest().body(
+          FlightCancellationResponse.builder()
+              .success(false)
+              .message("Flight with ID " + id + " not found")
+              .build()
+      );
+    }
+    
+    // Validate that flight can be cancelled (not already completed or in-flight)
+    if ("COMPLETADO".equals(flight.getStatus()) || "EN_VUELO".equals(flight.getStatus())) {
+      return ResponseEntity.badRequest().body(
+          FlightCancellationResponse.builder()
+              .success(false)
+              .message("Cannot cancel flight " + flight.getCode() + " - already " + flight.getStatus())
+              .flight(flight)
+              .requiresReplanning(false)
+              .build()
+      );
+    }
+    
+    // Update flight status to INACTIVE (cancelled)
+    flight.setStatus("INACTIVE");
+    FlightSchema updatedFlight = flightController.updateFlight(id, flight);
+    
+    System.out.println("Flight " + flight.getCode() + " cancelled successfully");
+    
+    return ResponseEntity.ok(
+        FlightCancellationResponse.builder()
+            .success(true)
+            .message("Flight " + flight.getCode() + " cancelled successfully")
+            .flight(updatedFlight)
+            .affectedProducts(0) // TODO: Calculate affected products
+            .requiresReplanning(true)
+            .build()
+    );
+  }
+
   @DeleteMapping("/{id}")
   public ResponseEntity<Void> deleteFlight(@PathVariable Integer id) {
     flightController.deleteFlight(id);
@@ -99,5 +188,40 @@ public class FlightAPI {
       return ResponseEntity.ok(flightController.countFlightsByStatus(status));
     }
     return ResponseEntity.ok(flightController.countAllFlights());
+  }
+
+  /**
+   * Request DTO for updating flight status
+   */
+  @Data
+  static class FlightStatusUpdateRequest {
+    private String status;
+  }
+
+  /**
+   * Request DTO for flight cancellation
+   */
+  @Data
+  @Builder
+  @NoArgsConstructor
+  @AllArgsConstructor
+  static class FlightCancellationRequest {
+    private String reason; // "WEATHER", "MECHANICAL", "MANUAL", etc.
+    private String currentSimulationTime; // ISO timestamp of current simulation time
+  }
+
+  /**
+   * Response DTO for flight cancellation
+   */
+  @Data
+  @Builder
+  @NoArgsConstructor
+  @AllArgsConstructor
+  static class FlightCancellationResponse {
+    private Boolean success;
+    private String message;
+    private FlightSchema flight;
+    private Integer affectedProducts;
+    private Boolean requiresReplanning;
   }
 }

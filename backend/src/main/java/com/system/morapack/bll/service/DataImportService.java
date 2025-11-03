@@ -109,10 +109,20 @@ public class DataImportService {
             // Clean up
             deleteTempFile(tempFile);
             
+            // Add current totals to response
+            long totalAirports = airportRepository.count();
+            long totalFlights = flightRepository.count();
+            long totalOrders = orderRepository.count();
+            long totalProducts = productRepository.count();
+            
             result.put("success", true);
             result.put("message", "Aeropuertos cargados exitosamente");
             result.put("count", savedAirports.size());
             result.put("cities", cities.size());
+            result.put("totalAirports", totalAirports);
+            result.put("totalFlights", totalFlights);
+            result.put("totalOrders", totalOrders);
+            result.put("totalProducts", totalProducts);
             
         } catch (Exception e) {
             result.put("success", false);
@@ -197,9 +207,19 @@ public class DataImportService {
             // Clean up
             deleteTempFile(tempFile);
             
+            // Add current totals to response
+            long totalAirports = airportRepository.count();
+            long totalFlights = flightRepository.count();
+            long totalOrders = orderRepository.count();
+            long totalProducts = productRepository.count();
+            
             result.put("success", true);
             result.put("message", "Vuelos cargados exitosamente");
             result.put("count", savedFlights.size());
+            result.put("totalAirports", totalAirports);
+            result.put("totalFlights", totalFlights);
+            result.put("totalOrders", totalOrders);
+            result.put("totalProducts", totalProducts);
             
         } catch (Exception e) {
             result.put("success", false);
@@ -305,10 +325,20 @@ public class DataImportService {
             // Clean up
             deleteTempFile(tempFile);
             
+            // Add current totals to response
+            long totalAirports = airportRepository.count();
+            long totalFlights = flightRepository.count();
+            long totalOrders = orderRepository.count();
+            long totalProducts = productRepository.count();
+            
             result.put("success", true);
             result.put("message", "Pedidos cargados exitosamente");
             result.put("orders", savedOrders.size());
             result.put("products", savedProducts.size());
+            result.put("totalAirports", totalAirports);
+            result.put("totalFlights", totalFlights);
+            result.put("totalOrders", totalOrders);
+            result.put("totalProducts", totalProducts);
             
         } catch (Exception e) {
             result.put("success", false);
@@ -415,6 +445,28 @@ public class DataImportService {
                 .build();
         
         return customerRepository.save(defaultCustomer);
+    }
+
+    /**
+     * Get current data status with counts
+     * @return Map with counts of airports, flights, orders, and products
+     */
+    public Map<String, Object> getDataStatus() {
+        Map<String, Object> status = new HashMap<>();
+        
+        // Use int instead of long to avoid JSON serialization issues
+        int airportsCount = (int) airportRepository.count();
+        int flightsCount = (int) flightRepository.count();
+        int ordersCount = (int) orderRepository.count();
+        int productsCount = (int) productRepository.count();
+        
+        status.put("airports", airportsCount);
+        status.put("flights", flightsCount);
+        status.put("orders", ordersCount);
+        status.put("products", productsCount);
+        status.put("hasData", airportsCount > 0 || flightsCount > 0 || ordersCount > 0);
+        
+        return status;
     }
 }
 
