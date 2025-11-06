@@ -101,10 +101,8 @@ public class DatabaseInputDataSource implements InputDataSource {
     }
 
     @Override
-    @Deprecated
     public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports) {
-        System.out.println("[DATABASE] Loading ALL orders (no time filtering) - DEPRECATED");
-        System.out.println("[DATABASE] Consider using loadOrders(airports, startTime, endTime) instead");
+        System.out.println("[DATABASE] Loading orders/products from PostgreSQL via OrderService...");
 
         List<Order> orders = orderService.fetchOrders(null); // null = fetch all
         ArrayList<OrderSchema> orderSchemas = new ArrayList<>();
@@ -117,42 +115,6 @@ public class DatabaseInputDataSource implements InputDataSource {
         }
 
         System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
-        return orderSchemas;
-    }
-
-    @Override
-    public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
-                                            LocalDateTime simulationStartTime,
-                                            LocalDateTime simulationEndTime) {
-        System.out.println("[DATABASE] Loading orders with time window filtering from PostgreSQL");
-        System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
-
-        // Fetch all orders and filter by creation date
-        // TODO: Optimize by adding query method to OrderService that filters by date range
-        List<Order> allOrders = orderService.fetchOrders(null);
-        ArrayList<OrderSchema> orderSchemas = new ArrayList<>();
-
-        int filteredCount = 0;
-
-        for (Order order : allOrders) {
-            // Filter by creation date (order date)
-            LocalDateTime orderDate = order.getCreationDate() != null ?
-                    order.getCreationDate() : LocalDateTime.now();
-
-            // Skip orders outside simulation time window
-            if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
-                filteredCount++;
-                continue;
-            }
-
-            OrderSchema orderSchema = convertToOrderSchema(order, airports);
-            if (orderSchema != null) {
-                orderSchemas.add(orderSchema);
-            }
-        }
-
-        System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
-        System.out.println("[DATABASE] Filtered out " + filteredCount + " orders outside time window");
         return orderSchemas;
     }
 
@@ -267,10 +229,16 @@ public class DatabaseInputDataSource implements InputDataSource {
             orderSchema.setCustomerSchema(customerSchema);
         }
 
-        // OPTIMIZATION: Don't load products here - they will be created at the end of algorithm
-        // Products are created only when orders are split during algorithm execution
-        // This avoids loading unnecessary data and reduces DB calls
-        orderSchema.setProductSchemas(new ArrayList<>()); // Empty list for now
+        // Load and convert products for this order using ProductService
+        List<Product> products = productService.getProductsByOrder(order.getId());
+        ArrayList<ProductSchema> productSchemas = new ArrayList<>();
+
+        for (Product product : products) {
+            ProductSchema productSchema = convertToProductSchema(product);
+            productSchemas.add(productSchema);
+        }
+
+        orderSchema.setProductSchemas(productSchemas);
 
         return orderSchema;
     }
