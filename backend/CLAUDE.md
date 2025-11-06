@@ -172,21 +172,179 @@ All tunable parameters are centralized in `config/Constants.java`:
 - Safety margins and validation toggles
 - Feature flags (product unitization, headquarters validation, verbose logging)
 
+## Operational Scenarios
+
+The system must support three distinct operational scenarios:
+
+### 1. Daily Scenario (Real-time Operations)
+- **Behavior:** Continuous simulation that runs indefinitely
+- **Frontend calls:** Every ~30 minutes of simulation time
+- **Algorithm input:** Current simulation time (e.g., `Day 0, 00:00:00`)
+- **Algorithm output:** Routes for orders within the time window
+- **Time progression:** Incremental (00:00 → 00:30 → 01:00 → ...)
+- **Use case:** Real-time order tracking and route visualization
+
+### 2. Weekly Scenario (7-Day Simulation)
+- **Behavior:** Fixed 7-day simulation
+- **Frontend calls:** Single call for entire week
+- **Algorithm input:** Start time (Day 0, 00:00:00) + 7-day duration
+- **Algorithm output:** Complete routes for all orders in 7 days
+- **Execution time:** Should take 30-90 minutes (per requirements)
+- **Use case:** Weekly planning and optimization
+
+### 3. Collapse Scenario (Stress Testing)
+- **Behavior:** Simulate until system capacity is exceeded
+- **Status:** Planned for later implementation
+- **Use case:** Identify system breaking points and capacity limits
+
+## Critical Issues to Address
+
+### Issue #1: Simulation Time Handling ⚠️ **HIGH PRIORITY**
+
+**Problem:**
+- Current implementation uses `LocalDateTime.now()` as reference time
+- No concept of simulation progression or time windows
+- Frontend cannot control which orders are processed
+
+**Required Changes:**
+1. Accept simulation time parameters from frontend:
+   - Current date/time in simulation
+   - Duration/time window to process
+2. Filter orders based on simulation time window
+3. Use simulation time (not system time) for all calculations
+
+**API Changes Needed:**
+```java
+// Add to AlgorithmRequest
+private LocalDateTime simulationStartTime;  // When simulation starts
+private LocalDateTime simulationEndTime;    // When simulation ends
+```
+
+### Issue #2: Order Data Loading ⚠️ **HIGH PRIORITY**
+
+**Problem:**
+- Old code reads single `products.txt` file
+- New structure has multiple files per airport (~36MB total)
+- Need to filter by time window to avoid loading all orders
+
+**Required Changes:**
+1. Update `InputProducts.java` to:
+   - Read all `_pedidos_{AIRPORT}_` files in `backend/data/`
+   - Parse new format: `id_pedido-aaaammdd-hh-mm-dest-###-IdClien`
+   - Filter orders by simulation time window
+   - Handle multiple origin airports correctly
+
+**Example:**
+```java
+// Parse: 000000001-20250102-01-38-EBCI-006-0007729
+String[] parts = line.split("-");
+String orderId = parts[0];           // "000000001"
+String dateStr = parts[1];           // "20250102"
+int hour = Integer.parseInt(parts[2]);     // 01
+int minute = Integer.parseInt(parts[3]);   // 38
+String destCode = parts[4];          // "EBCI"
+int quantity = Integer.parseInt(parts[5]); // 006
+String customerId = parts[6];        // "0007729"
+
+// Convert to LocalDateTime
+LocalDateTime orderDate = LocalDateTime.parse(
+    dateStr + "T" + String.format("%02d:%02d:00", hour, minute)
+);
+
+// Filter by simulation window
+if (orderDate.isBefore(simStart) || orderDate.isAfter(simEnd)) {
+    continue; // Skip this order
+}
+```
+
+### Issue #3: API Response Simplification
+
+**Problem:**
+- Response includes `algorithmType` (only using ALNS)
+- Tabu-specific parameters in request
+- No clear simulation time info in response
+
+**Required Changes:**
+1. Remove `algorithmType` from `AlgorithmResultSchema`
+2. Add simulation window info to response:
+   ```java
+   private LocalDateTime simulationStartTime;
+   private LocalDateTime simulationEndTime;
+   ```
+3. Add product-level metrics:
+   ```java
+   private Integer assignedProducts;
+   private Integer unassignedProducts;
+   ```
+
+### Issue #4: Scenario-Specific Endpoints
+
+**Problem:**
+- Single generic `/execute` endpoint
+- Frontend must manage scenario logic
+- No validation for scenario requirements
+
+**Required Changes:**
+Create dedicated endpoints:
+- `POST /api/algorithm/daily` - For incremental daily operations
+- `POST /api/algorithm/weekly` - For 7-day batch processing
+- `POST /api/algorithm/collapse` - For stress testing (future)
+
 ## Current Development Tasks
 
-From the project instructions, the priority tasks are:
+Priority order for implementation:
 
-1. **Optimize algorithms** to solve the complete problem statement
-2. **Implement proper Product usage** - currently algorithms use OrderSchema but not individual ProductSchema tracking
-3. **Fix minimum layover constraint** - "Los tiempos de estancia mínima para los productos en tránsito (destino intermedio) es de 1 hora" is not properly enforced
-4. **Debug and fix algorithm issues** - general algorithm correctness problems
+1. ✅ **Update data format documentation** - COMPLETED
+2. 🔄 **Implement simulation time handling** - IN PROGRESS
+   - Update `AlgorithmRequest` to accept simulation time
+   - Update `InputProducts` to parse new format and filter by time
+   - Update `Solution` constructor to use simulation time
+3. ⏳ **Create scenario endpoints** - PENDING
+   - Add `/api/algorithm/daily` endpoint
+   - Add `/api/algorithm/weekly` endpoint
+4. ⏳ **Simplify API responses** - PENDING
+   - Remove algorithm type field
+   - Add simulation time info
+   - Add product-level metrics
+5. ⏳ **Optimize ALNS for scenarios** - PENDING
+   - Tune parameters for daily vs weekly
+   - Add proper product-level tracking
+   - Fix 1-hour layover constraint
 
 ## Data Files
 
-Input data located in `data/` directory:
-- `airportInfo.txt` - Airport and warehouse capacity information
-- `flights.txt` - Available flight routes and schedules
-- `products.txt` - Product/order specifications
+Input data located in `backend/data/` directory:
+
+### Airport Information
+- **File:** `airportInfo.txt`
+- **Content:** Airport and warehouse capacity information
+
+### Flights
+- **File:** `flights.txt`
+- **Format:** `ORIGIN-DESTINATION-DEPARTURE-ARRIVAL-CAPACITY`
+- **Content:** Available flight routes and schedules
+
+### Orders (Updated Structure)
+- **Files:** `_pedidos_{AIRPORT_CODE}_` (one file per origin airport)
+- **Examples:** `_pedidos_LDZA_`, `_pedidos_SVMI_`, `_pedidos_SBBR_`
+- **Format:** `id_pedido-aaaammdd-hh-mm-dest-###-IdClien`
+- **Example:** `000000001-20250102-01-38-EBCI-006-0007729`
+
+**Field Description:**
+- `id_pedido`: Order identifier (unique per destination)
+- `aaaammdd`: Order creation date (YYYY-MM-DD format)
+  - Example: `20250102` = January 2, 2025
+- `hh`: Hour when order is created (00-23)
+- `mm`: Minute when order is created (00-59)
+- `dest`: Destination airport code (e.g., EBCI, SVMI, SBBR)
+- `###`: Product quantity as 3-digit string (001-999)
+- `IdClien`: Customer identifier as 7-digit number (0000001-9999999)
+
+**Important Notes:**
+- Each file represents orders originating from a specific airport
+- Orders include precise timestamp (date + time) for creation
+- The algorithm must filter orders based on simulation time window
+- File size: ~36MB total across all airport files (do not read all at once)
 
 ## Technology Stack
 
