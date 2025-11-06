@@ -5,8 +5,6 @@ import com.system.morapack.schemas.AirportSchema;
 import com.system.morapack.schemas.FlightSchema;
 import com.system.morapack.schemas.OrderSchema;
 
-import java.io.File;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 /**
@@ -15,7 +13,7 @@ import java.util.ArrayList;
  * Reads data from text files in the data/ directory:
  * - airportInfo.txt: Airport and warehouse information
  * - flights.txt: Available flights and routes
- * - _pedidos_{AIRPORT}_: Orders and products to be delivered (per airport)
+ * - products.txt: Orders and products to be delivered
  *
  * This is the CURRENT implementation used by the algorithm.
  */
@@ -44,36 +42,9 @@ public class FileInputDataSource implements InputDataSource {
     }
 
     @Override
-    @Deprecated
     public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports) {
-        System.out.println("[FILE] Loading ALL orders (no time filtering) - DEPRECATED");
-        System.out.println("[FILE] Consider using loadOrders(airports, startTime, endTime) instead");
-
-        // Get data directory from Constants.PRODUCTS_FILE_PATH
-        File productsFile = new File(Constants.PRODUCTS_FILE_PATH);
-        String dataDirectory = productsFile.getParent();
-
-        // Use legacy constructor (no time filtering)
+        System.out.println("[FILE] Loading orders/products from: " + Constants.PRODUCTS_FILE_PATH);
         this.inputProducts = new InputProducts(Constants.PRODUCTS_FILE_PATH, airports);
-        return inputProducts.readProducts();
-    }
-
-    @Override
-    public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
-                                            LocalDateTime simulationStartTime,
-                                            LocalDateTime simulationEndTime) {
-        System.out.println("[FILE] Loading orders with time window filtering");
-        System.out.println("[FILE] Time window: " + simulationStartTime + " to " + simulationEndTime);
-
-        // Get data directory from Constants.PRODUCTS_FILE_PATH
-        File productsFile = new File(Constants.PRODUCTS_FILE_PATH);
-        String dataDirectory = productsFile.getParent();
-
-        System.out.println("[FILE] Data directory: " + dataDirectory);
-
-        // Use new constructor with time window filtering
-        this.inputProducts = new InputProducts(dataDirectory, airports,
-                                               simulationStartTime, simulationEndTime);
         return inputProducts.readProducts();
     }
 
