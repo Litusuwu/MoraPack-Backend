@@ -32,4 +32,7 @@ public class OrderSchema {
     private RouteSchema assignedRouteSchema;
     private double priority;
     private ArrayList<ProductSchema> productSchemas;
+
+    // Quantity field for order splitting (used by ALNS algorithm)
+    private Integer quantity;
 }

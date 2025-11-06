@@ -39,6 +39,10 @@ public class OrderService {
     return orderRepository.saveAll(orders);
   }
 
+  public Order save(Order order) {
+    return orderRepository.save(order);
+  }
+
   public Order updateOrder(Integer id, Order updates) {
     Order order = getOrder(id);
 

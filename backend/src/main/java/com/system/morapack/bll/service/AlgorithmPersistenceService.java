@@ -85,7 +85,7 @@ public class AlgorithmPersistenceService {
                 // Create Product record for this split
                 Product product = new Product();
                 product.setName("Product-Split-" + orderId + "-" + productsCreated);
-                product.setStatus(split.getStatus());
+                product.setStatus(mapStatusToPackageStatus(split.getStatus()));
 
                 // Set order reference
                 com.system.morapack.dao.morapack_psql.model.Order orderEntity =
@@ -103,7 +103,7 @@ public class AlgorithmPersistenceService {
                               .append("-")
                               .append(flight.getDestinationAirportSchema().getCodeIATA());
                 }
-                product.setAssignedFlight(flightPath);
+                product.setAssignedFlight(flightPath.toString());
 
                 // Save product
                 productService.createProduct(product);
@@ -151,6 +151,24 @@ public class AlgorithmPersistenceService {
         }
 
         return grouped;
+    }
+
+    /**
+     * Map Status enum to PackageStatus enum
+     */
+    private PackageStatus mapStatusToPackageStatus(Status status) {
+        switch (status) {
+            case ASSIGNED:
+                return PackageStatus.IN_TRANSIT;
+            case NOT_ASSIGNED:
+                return PackageStatus.PENDING;
+            case DELIVERED:
+                return PackageStatus.DELIVERED;
+            case NOT_DELIVERED:
+                return PackageStatus.DELAYED;
+            default:
+                return PackageStatus.PENDING;
+        }
     }
 
     /**
