@@ -1,5 +1,6 @@
 package com.system.morapack.bll.controller;
 
+import com.system.morapack.bll.service.AlgorithmPersistenceService;
 import com.system.morapack.config.Constants;
 import com.system.morapack.schemas.*;
 import com.system.morapack.schemas.algorithm.ALNS.Solution;
@@ -15,6 +16,9 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class AlgorithmController {
+
+  // NEW: Persistence service for batch DB operations
+  private final AlgorithmPersistenceService persistenceService;
 
   /**
    * Helper class to group flights by route
@@ -249,12 +253,33 @@ public class AlgorithmController {
       LocalDateTime executionEndTime = LocalDateTime.now();
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
 
+      // NEW: Get order splits for batch persistence
+      Map<Integer, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      int productsCreated = 0;
+
+      if (orderSplits != null && !orderSplits.isEmpty()) {
+        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE ===");
+        List<AlgorithmPersistenceService.OrderSplit> persistenceSplits = convertToOrderSplits(orderSplits);
+        productsCreated = persistenceService.persistSolution(persistenceSplits);
+        System.out.println("Persisted " + productsCreated + " product records");
+      } else {
+        System.out.println("No order splits to persist");
+      }
+
       // Get the product-level solution
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
 
       // Convert to result with simulation time info
-      return convertALNSSolutionToResult(productSolution, executionStartTime, executionEndTime,
-                                         executionTime, simStart, simEnd);
+      AlgorithmResultSchema result = convertALNSSolutionToResult(productSolution, executionStartTime,
+                                                                  executionEndTime, executionTime,
+                                                                  simStart, simEnd);
+
+      // Update message with persistence info
+      String message = "ALNS algorithm executed successfully. " +
+                      "Products persisted: " + productsCreated;
+      result.setMessage(message);
+
+      return result;
 
     } catch (Exception e) {
       LocalDateTime executionEndTime = LocalDateTime.now();
@@ -298,12 +323,34 @@ public class AlgorithmController {
       System.out.println("Actual execution time: " + executionTime + " seconds (" +
                         (executionTime / 60) + " minutes)");
 
+      // NEW: Get order splits for batch persistence
+      Map<Integer, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      int productsCreated = 0;
+
+      if (orderSplits != null && !orderSplits.isEmpty()) {
+        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE ===");
+        List<AlgorithmPersistenceService.OrderSplit> persistenceSplits = convertToOrderSplits(orderSplits);
+        productsCreated = persistenceService.persistSolution(persistenceSplits);
+        System.out.println("Persisted " + productsCreated + " product records");
+      } else {
+        System.out.println("No order splits to persist");
+      }
+
       // Get the product-level solution
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
 
       // Convert to result with simulation time info
-      return convertALNSSolutionToResult(productSolution, executionStartTime, executionEndTime,
-                                         executionTime, simStart, simEnd);
+      AlgorithmResultSchema result = convertALNSSolutionToResult(productSolution, executionStartTime,
+                                                                  executionEndTime, executionTime,
+                                                                  simStart, simEnd);
+
+      // Update message with persistence info
+      String message = "ALNS algorithm executed successfully. " +
+                      "Execution time: " + (executionTime / 60) + " minutes. " +
+                      "Products persisted: " + productsCreated;
+      result.setMessage(message);
+
+      return result;
 
     } catch (Exception e) {
       LocalDateTime executionEndTime = LocalDateTime.now();
@@ -316,6 +363,33 @@ public class AlgorithmController {
           .executionTimeSeconds(ChronoUnit.SECONDS.between(executionStartTime, executionEndTime))
           .build();
     }
+  }
+
+  /**
+   * NEW: Convert Solution's OrderSplitInfo to AlgorithmPersistenceService's OrderSplit
+   * Enables batch persistence of order splits to database
+   */
+  private List<AlgorithmPersistenceService.OrderSplit> convertToOrderSplits(
+      Map<Integer, List<Solution.OrderSplitInfo>> orderSplitsMap) {
+
+    List<AlgorithmPersistenceService.OrderSplit> splits = new ArrayList<>();
+
+    for (Map.Entry<Integer, List<Solution.OrderSplitInfo>> entry : orderSplitsMap.entrySet()) {
+      Integer orderId = entry.getKey();
+      List<Solution.OrderSplitInfo> splitInfos = entry.getValue();
+
+      for (Solution.OrderSplitInfo splitInfo : splitInfos) {
+        AlgorithmPersistenceService.OrderSplit split =
+            new AlgorithmPersistenceService.OrderSplit(
+                orderId,
+                splitInfo.quantity,
+                splitInfo.assignedRoute
+            );
+        splits.add(split);
+      }
+    }
+
+    return splits;
   }
 
   /**

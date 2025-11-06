@@ -83,6 +83,24 @@ public class Solution {
     private LocalDateTime simulationStartTime;
     private LocalDateTime simulationEndTime;
 
+    // NEW: Order splitting tracking for batch persistence
+    // Tracks order splits created during algorithm execution
+    // Format: Map<orderId, List<SplitInfo>> where SplitInfo = {quantity, route}
+    private Map<Integer, List<OrderSplitInfo>> orderSplits;
+
+    /**
+     * Inner class to track order split information
+     */
+    public static class OrderSplitInfo {
+        public Integer quantity;
+        public ArrayList<FlightSchema> assignedRoute;
+
+        public OrderSplitInfo(Integer quantity, ArrayList<FlightSchema> route) {
+            this.quantity = quantity;
+            this.assignedRoute = route;
+        }
+    }
+
     /**
      * Constructor with simulation time window (PREFERRED for daily/weekly scenarios)
      * Loads only orders within the specified time window
@@ -167,7 +185,11 @@ public class Solution {
         
         this.warehouseOccupancy = new HashMap<>();
         this.temporalWarehouseOccupancy = new HashMap<>();
-        
+
+        // NEW: Initialize order splits tracking
+        this.orderSplits = new HashMap<>();
+        System.out.println("Order splits tracking initialized (for batch persistence)");
+
         // CHANGED: Inicializar cache robusta y T0
         initializeCityToAirportCache();
         initializeT0();
@@ -353,6 +375,30 @@ public class Solution {
      */
     public LocalDateTime getSimulationEndTime() {
         return simulationEndTime;
+    }
+
+    /**
+     * Get order splits for batch persistence
+     * Returns map of order ID to list of splits (quantity + route)
+     * This enables batch DB inserts after algorithm completes
+     */
+    public Map<Integer, List<OrderSplitInfo>> getOrderSplits() {
+        return orderSplits;
+    }
+
+    /**
+     * Track an order assignment or split
+     * Called when an order (or part of it) is assigned to a route
+     */
+    private void trackOrderAssignment(Integer orderId, Integer quantity, ArrayList<FlightSchema> route) {
+        if (!orderSplits.containsKey(orderId)) {
+            orderSplits.put(orderId, new ArrayList<>());
+        }
+        orderSplits.get(orderId).add(new OrderSplitInfo(quantity, route));
+
+        if (Constants.VERBOSE_LOGGING) {
+            System.out.println("Tracked assignment: Order " + orderId + " - " + quantity + " items on route");
+        }
     }
 
     /**
@@ -1481,7 +1527,134 @@ public class Solution {
         int currentOccupancy = warehouseOccupancy.getOrDefault(airportSchema, 0);
         warehouseOccupancy.put(airportSchema, currentOccupancy + productCount);
     }
-    
+
+    /**
+     * NEW: Attempt to split an order when it doesn't fit
+     * Splits order in half and tries to assign both halves
+     *
+     * @param pkg Order to split
+     * @param route Route to assign
+     * @param currentSolution Current solution map
+     * @return true if at least one split was assigned
+     */
+    private boolean attemptOrderSplit(OrderSchema pkg, ArrayList<FlightSchema> route,
+                                     HashMap<OrderSchema, ArrayList<FlightSchema>> currentSolution) {
+        // Get product count (default to order quantity if no products)
+        int totalQuantity = pkg.getProductSchemas() != null && !pkg.getProductSchemas().isEmpty()
+                          ? pkg.getProductSchemas().size()
+                          : pkg.getQuantity();
+
+        // Don't split if quantity is 1 or too small
+        if (totalQuantity <= 1) {
+            return false;
+        }
+
+        // Split in half
+        int firstHalf = totalQuantity / 2;
+        int secondHalf = totalQuantity - firstHalf;
+
+        if (Constants.VERBOSE_LOGGING) {
+            System.out.println("Attempting to split order " + pkg.getId() +
+                             " (" + totalQuantity + " items) into " + firstHalf + " + " + secondHalf);
+        }
+
+        boolean anyAssigned = false;
+
+        // Try to assign first half
+        if (tryAssignPartialOrder(pkg, firstHalf, route, currentSolution)) {
+            anyAssigned = true;
+            if (Constants.VERBOSE_LOGGING) {
+                System.out.println("  First half (" + firstHalf + " items) assigned successfully");
+            }
+        }
+
+        // Try to assign second half (might need different route)
+        if (tryAssignPartialOrder(pkg, secondHalf, route, currentSolution)) {
+            anyAssigned = true;
+            if (Constants.VERBOSE_LOGGING) {
+                System.out.println("  Second half (" + secondHalf + " items) assigned successfully");
+            }
+        } else if (anyAssigned) {
+            // First half was assigned but second wasn't - try alternative routes for second half
+            ArrayList<FlightSchema> alternativeRoute = findBestRouteWithTimeWindows(pkg, currentSolution);
+            if (alternativeRoute != null && !alternativeRoute.equals(route)) {
+                if (tryAssignPartialOrder(pkg, secondHalf, alternativeRoute, currentSolution)) {
+                    if (Constants.VERBOSE_LOGGING) {
+                        System.out.println("  Second half assigned to alternative route");
+                    }
+                }
+            }
+        }
+
+        return anyAssigned;
+    }
+
+    /**
+     * NEW: Try to assign a partial order (split) to a route
+     *
+     * @param originalPkg Original order
+     * @param quantity Quantity to assign in this split
+     * @param route Route to assign to
+     * @param currentSolution Current solution map
+     * @return true if assignment succeeded
+     */
+    private boolean tryAssignPartialOrder(OrderSchema originalPkg, int quantity,
+                                         ArrayList<FlightSchema> route,
+                                         HashMap<OrderSchema, ArrayList<FlightSchema>> currentSolution) {
+        if (route == null || quantity <= 0) {
+            return false;
+        }
+
+        // Create a temporary order schema to test capacity with reduced quantity
+        OrderSchema testPkg = createPartialOrder(originalPkg, quantity);
+
+        // Check if this partial order can be assigned
+        if (canAssignWithSpaceOptimization(testPkg, route, currentSolution)) {
+            // Track this split for batch persistence
+            trackOrderAssignment(originalPkg.getId(), quantity, route);
+
+            // Update capacities
+            updateFlightCapacities(route, quantity);
+
+            AirportSchema destinationAirport = getAirportByCity(originalPkg.getDestinationCitySchema());
+            if (destinationAirport != null) {
+                incrementWarehouseOccupancy(destinationAirport, quantity);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * NEW: Create a partial order for testing capacity
+     *
+     * @param original Original order
+     * @param quantity Quantity for this partial order
+     * @return New OrderSchema with reduced quantity
+     */
+    private OrderSchema createPartialOrder(OrderSchema original, int quantity) {
+        OrderSchema partial = new OrderSchema();
+        partial.setId(original.getId());
+        partial.setQuantity(quantity);
+        partial.setOrderDate(original.getOrderDate());
+        partial.setDeliveryDeadline(original.getDeliveryDeadline());
+        partial.setCurrentLocation(original.getCurrentLocation());
+        partial.setDestinationCitySchema(original.getDestinationCitySchema());
+        partial.setPriority(original.getPriority());
+        partial.setCustomerId(original.getCustomerId());
+
+        // Create empty product list with specified quantity size
+        ArrayList<ProductSchema> partialProducts = new ArrayList<>();
+        for (int i = 0; i < quantity; i++) {
+            partialProducts.add(new ProductSchema()); // Dummy products for capacity calculation
+        }
+        partial.setProductSchemas(partialProducts);
+
+        return partial;
+    }
+
     /**
      * NEW: getPackageStartTime corregido con ancla T0 y clamp
      */
@@ -1750,13 +1923,23 @@ public class Solution {
                         currentSolution.put(pkg, bestRoute);
                         assignedPackages++;
                         iterationAssigned++;
-                        
+
                         // Actualizar capacidades DESPUÉS de la validación
                         updateFlightCapacities(bestRoute, productCount);
                         incrementWarehouseOccupancy(destinationAirportSchema, productCount);
-                        
+
+                        // NEW: Track this assignment for batch persistence
+                        trackOrderAssignment(pkg.getId(), productCount, bestRoute);
+
                         if (iteration > 0) {
                             System.out.println("  Reasignado paquete " + pkg.getId() + " en iteración " + iteration);
+                        }
+                    } else {
+                        // NEW: Order doesn't fit - attempt to split it
+                        if (attemptOrderSplit(pkg, bestRoute, currentSolution)) {
+                            // At least one split was assigned (tracked internally)
+                            iterationAssigned++;
+                            System.out.println("  Order " + pkg.getId() + " split and partially assigned");
                         }
                     }
                 }
