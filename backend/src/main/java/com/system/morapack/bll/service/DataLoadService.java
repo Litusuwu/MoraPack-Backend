@@ -1,10 +1,11 @@
 package com.system.morapack.bll.service;
 
 import com.system.morapack.config.Constants;
+import com.system.morapack.dao.morapack_psql.model.Airport;
 import com.system.morapack.dao.morapack_psql.model.City;
 import com.system.morapack.dao.morapack_psql.model.Customer;
 import com.system.morapack.dao.morapack_psql.model.Order;
-import com.system.morapack.dao.morapack_psql.service.CityService;
+import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.schemas.PackageStatus;
@@ -31,11 +32,11 @@ import java.util.Map;
 public class DataLoadService {
 
     private final OrderService orderService;
-    private final CityService cityService;
+    private final AirportService airportService;
     private final CustomerService customerService;
 
-    // Cache for city lookups (airport code -> City entity)
-    private Map<String, City> cityCache = new HashMap<>();
+    // Cache for airport lookups (airport code -> Airport entity)
+    private Map<String, Airport> airportCache = new HashMap<>();
     // Cache for customer lookups (customerId -> Customer entity)
     private Map<String, Customer> customerCache = new HashMap<>();
 
@@ -195,14 +196,17 @@ public class DataLoadService {
         int day = Integer.parseInt(dateStr.substring(6, 8));
         LocalDateTime orderDate = LocalDateTime.of(year, month, day, hour, minute, 0);
 
-        // Calculate delivery deadline based on origin/destination continents
-        // For now, use simple rule: +2 days same continent, +3 days different continent
-        // TODO: Implement proper continent detection
-        LocalDateTime deliveryDeadline = orderDate.plusDays(3);
-
         // Get or create entities
-        City originCity = getCityByAirportCode(originAirportCode);
-        City destinationCity = getCityByAirportCode(destinationAirportCode);
+        Airport originAirport = getAirportByCode(originAirportCode);
+        Airport destinationAirport = getAirportByCode(destinationAirportCode);
+        City originCity = originAirport.getCity();
+        City destinationCity = destinationAirport.getCity();
+
+        // Calculate delivery deadline based on origin/destination continents
+        // Business rules: 2 days max (same continent), 3 days max (different continent)
+        boolean sameContinent = originCity.getContinent() == destinationCity.getContinent();
+        int deliveryDays = sameContinent ? 2 : 3;
+        LocalDateTime deliveryDeadline = orderDate.plusDays(deliveryDays);
         Customer customer = getOrCreateCustomer(customerId);
 
         // Build Order entity
@@ -219,73 +223,72 @@ public class DataLoadService {
     }
 
     /**
-     * Initialize city and customer caches from database
+     * Initialize airport and customer caches from database
      */
     private void initializeCaches() {
         System.out.println("Initializing caches...");
 
-        // Load all cities
-        List<City> cities = cityService.fetch(null);
-        for (City city : cities) {
-            // Cache by airport code (if available)
-            // TODO: Implement proper airport code mapping
-            cityCache.put(city.getName().toUpperCase(), city);
+        // Load all airports
+        List<Airport> airports = airportService.fetchAirports(null);
+        for (Airport airport : airports) {
+            // Cache by IATA code
+            if (airport.getCodeIATA() != null) {
+                airportCache.put(airport.getCodeIATA().toUpperCase(), airport);
+            }
         }
 
-        System.out.println("City cache initialized: " + cityCache.size() + " cities");
+        System.out.println("Airport cache initialized: " + airportCache.size() + " airports");
 
         // Customer cache populated on-demand
         customerCache.clear();
     }
 
     /**
-     * Get city by airport code (with fallback to city name)
+     * Get airport by IATA code
      */
-    private City getCityByAirportCode(String airportCode) {
+    private Airport getAirportByCode(String airportCode) {
+        // Normalize to uppercase
+        String codeUpper = airportCode.toUpperCase();
+
         // Check cache first
-        if (cityCache.containsKey(airportCode)) {
-            return cityCache.get(airportCode);
+        if (airportCache.containsKey(codeUpper)) {
+            return airportCache.get(codeUpper);
         }
 
         // Try to find in database
-        // TODO: Implement proper airport code to city mapping
-        // For now, return first city as fallback
-        List<City> cities = cityService.fetch(null);
-        if (!cities.isEmpty()) {
-            City city = cities.get(0);
-            cityCache.put(airportCode, city);
-            return city;
+        try {
+            Airport airport = airportService.getByCode(codeUpper);
+            airportCache.put(codeUpper, airport);
+            return airport;
+        } catch (Exception e) {
+            throw new IllegalStateException("Airport not found with code: " + airportCode +
+                ". Please ensure airport data is loaded in the database.", e);
         }
-
-        throw new IllegalStateException("No cities found in database. Please load city data first.");
     }
 
     /**
      * Get or create customer by ID
+     * Uses a default customer for orders if specific customer doesn't exist
      */
     private Customer getOrCreateCustomer(String customerId) {
+        // Check cache first
         if (customerCache.containsKey(customerId)) {
             return customerCache.get(customerId);
         }
 
-        // Try to find existing customer
-        List<Customer> allCustomers = customerService.fetch(null);
-        for (Customer customer : allCustomers) {
-            if (customer.getName() != null && customer.getName().contains(customerId)) {
-                customerCache.put(customerId, customer);
-                return customer;
-            }
-        }
+        // Try to find existing customers
+        List<Customer> allCustomers = customerService.fetchCustomers(null);
 
-        // Return first customer as fallback
-        // TODO: Create new customer if needed
+        // For now, use the first available customer as default
+        // TODO: Create individual customers per customerId with proper person/user data
         if (!allCustomers.isEmpty()) {
             Customer customer = allCustomers.get(0);
             customerCache.put(customerId, customer);
             return customer;
         }
 
-        throw new IllegalStateException("No customers found in database. Please load customer data first.");
+        throw new IllegalStateException("No customers found in database. " +
+            "Please ensure at least one customer exists in the database.");
     }
 
     /**
