@@ -2295,11 +2295,13 @@ public class Solution {
             // CORRECCIÓN: Recalcular sameContinentRoute para el factor de complejidad
             CitySchema origin = pkg.getCurrentLocation();
             CitySchema destination = pkg.getDestinationCitySchema();
-            boolean sameContinentRoute = (origin != null && destination != null) && 
+            boolean sameContinentRoute = (origin != null && destination != null) &&
                                         origin.getContinent() == destination.getContinent();
-            
+
             int complexityFactor = route.size() + (sameContinentRoute ? 0 : 2);
-            safetyMargin = 0.01 * (1 + random.nextInt(complexityFactor * 3));
+            // FIX: Ensure bound is at least 1 for random.nextInt()
+            int randomBound = Math.max(1, complexityFactor * 3);
+            safetyMargin = 0.01 * (1 + random.nextInt(randomBound));
             totalTime = totalTime * (1.0 + safetyMargin); // Aumentar tiempo estimado para ser conservadores
         }
         
