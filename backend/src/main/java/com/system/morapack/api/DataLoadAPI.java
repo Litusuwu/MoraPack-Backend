@@ -66,14 +66,15 @@ public class DataLoadAPI {
             response.put("success", result.success);
             response.put("message", result.success ?
                 "Orders loaded successfully" : result.errorMessage);
-            response.put("statistics", Map.of(
-                "ordersLoaded", result.ordersLoaded,
-                "ordersCreated", result.ordersCreated,
-                "ordersFiltered", result.ordersFiltered,
-                "parseErrors", result.parseErrors,
-                "fileErrors", result.fileErrors,
-                "durationSeconds", result.durationSeconds
-            ));
+            Map<String, Object> statistics = new HashMap<>();
+            statistics.put("ordersLoaded", result.ordersLoaded);
+            statistics.put("ordersCreated", result.ordersCreated);
+            statistics.put("ordersFiltered", result.ordersFiltered);
+            statistics.put("customersCreated", result.customersCreated);
+            statistics.put("parseErrors", result.parseErrors);
+            statistics.put("fileErrors", result.fileErrors);
+            statistics.put("durationSeconds", result.durationSeconds);
+            response.put("statistics", statistics);
             response.put("startTime", result.startTime);
             response.put("endTime", result.endTime);
 

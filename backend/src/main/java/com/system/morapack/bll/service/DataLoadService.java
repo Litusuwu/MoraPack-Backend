@@ -5,10 +5,13 @@ import com.system.morapack.dao.morapack_psql.model.Airport;
 import com.system.morapack.dao.morapack_psql.model.City;
 import com.system.morapack.dao.morapack_psql.model.Customer;
 import com.system.morapack.dao.morapack_psql.model.Order;
+import com.system.morapack.dao.morapack_psql.model.User;
 import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
+import com.system.morapack.dao.morapack_psql.service.UserService;
 import com.system.morapack.schemas.PackageStatus;
+import com.system.morapack.schemas.TypeUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,11 +37,15 @@ public class DataLoadService {
     private final OrderService orderService;
     private final AirportService airportService;
     private final CustomerService customerService;
+    private final UserService userService;
 
     // Cache for airport lookups (airport code -> Airport entity)
     private Map<String, Airport> airportCache = new HashMap<>();
     // Cache for customer lookups (customerId -> Customer entity)
     private Map<String, Customer> customerCache = new HashMap<>();
+
+    // Counter for newly created customers during load operation
+    private int customersCreated = 0;
 
     /**
      * Load orders from _pedidos_{AIRPORT}_ files into database
@@ -144,6 +151,7 @@ public class DataLoadService {
             try {
                 List<Order> createdOrders = orderService.bulkCreateOrders(ordersToCreate);
                 result.ordersCreated = createdOrders.size();
+                result.customersCreated = customersCreated;
                 result.success = true;
             } catch (Exception e) {
                 result.success = false;
@@ -163,6 +171,7 @@ public class DataLoadService {
         System.out.println("Orders loaded: " + result.ordersLoaded);
         System.out.println("Orders created: " + result.ordersCreated);
         System.out.println("Orders filtered: " + result.ordersFiltered);
+        System.out.println("Customers created: " + result.customersCreated);
         System.out.println("Parse errors: " + result.parseErrors);
         System.out.println("Duration: " + result.durationSeconds + " seconds");
         System.out.println("========================================");
@@ -239,8 +248,19 @@ public class DataLoadService {
 
         System.out.println("Airport cache initialized: " + airportCache.size() + " airports");
 
-        // Customer cache populated on-demand
-        customerCache.clear();
+        // Load existing customers
+        List<Customer> existingCustomers = customerService.fetchCustomers(null);
+        for (Customer customer : existingCustomers) {
+            // Try to extract customer ID from phone or fiscal address
+            // This is a best-effort attempt to link existing customers
+            if (customer.getPhone() != null && customer.getPhone().matches("\\d{7}")) {
+                customerCache.put(customer.getPhone(), customer);
+            }
+        }
+        System.out.println("Customer cache initialized: " + customerCache.size() + " existing customers");
+
+        // Reset counter
+        customersCreated = 0;
     }
 
     /**
@@ -268,7 +288,7 @@ public class DataLoadService {
 
     /**
      * Get or create customer by ID
-     * Uses a default customer for orders if specific customer doesn't exist
+     * Creates new customers automatically with associated user accounts
      */
     private Customer getOrCreateCustomer(String customerId) {
         // Check cache first
@@ -276,19 +296,40 @@ public class DataLoadService {
             return customerCache.get(customerId);
         }
 
-        // Try to find existing customers
-        List<Customer> allCustomers = customerService.fetchCustomers(null);
+        // Customer doesn't exist, create new one
+        System.out.println("Creating new customer with ID: " + customerId);
 
-        // For now, use the first available customer as default
-        // TODO: Create individual customers per customerId with proper person/user data
-        if (!allCustomers.isEmpty()) {
-            Customer customer = allCustomers.get(0);
-            customerCache.put(customerId, customer);
-            return customer;
+        try {
+            // Create User (person) for the customer
+            User user = User.builder()
+                .name("Customer")
+                .lastName(customerId)  // Use customer ID as last name for now
+                .userType(TypeUser.CUSTOMER)
+                .build();
+
+            User savedUser = userService.createUser(user);
+
+            // Create Customer
+            Customer customer = Customer.builder()
+                .phone(customerId)  // Use customer ID as phone for tracking
+                .fiscalAddress("Address-" + customerId)  // Placeholder address
+                .createdAt(LocalDateTime.now())
+                .person(savedUser)
+                .build();
+
+            Customer savedCustomer = customerService.createCustomer(customer);
+
+            // Cache the customer
+            customerCache.put(customerId, savedCustomer);
+            customersCreated++;
+
+            System.out.println("Customer created successfully: " + customerId);
+            return savedCustomer;
+
+        } catch (Exception e) {
+            System.err.println("Failed to create customer " + customerId + ": " + e.getMessage());
+            throw new IllegalStateException("Failed to create customer with ID: " + customerId, e);
         }
-
-        throw new IllegalStateException("No customers found in database. " +
-            "Please ensure at least one customer exists in the database.");
     }
 
     /**
@@ -300,6 +341,7 @@ public class DataLoadService {
         public int ordersLoaded = 0;
         public int ordersCreated = 0;
         public int ordersFiltered = 0;
+        public int customersCreated = 0;
         public int parseErrors = 0;
         public int fileErrors = 0;
         public LocalDateTime startTime;
