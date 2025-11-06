@@ -46,9 +46,8 @@ public class Order {
   @Column(name = "pickup_time_hours", nullable = false)
   private Double pickupTimeHours;
 
-  
+
   @Column(name = "creation_date", nullable = false)
-  @CreationTimestamp
   private LocalDateTime creationDate;
 
   @Column(name = "updated_at", nullable = false)
