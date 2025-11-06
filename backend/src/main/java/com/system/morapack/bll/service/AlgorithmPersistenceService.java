@@ -140,7 +140,7 @@ public class AlgorithmPersistenceService {
     public void updateOrderStatusAndFlight(Integer orderId, PackageStatus status, Flight assignedFlight) {
         try {
             // Get the order entity
-            com.system.morapack.dao.morapack_psql.model.Order order = orderService.get(orderId);
+            com.system.morapack.dao.morapack_psql.model.Order order = orderService.getOrder(orderId);
 
             // Update status
             order.setStatus(status);
@@ -151,7 +151,7 @@ public class AlgorithmPersistenceService {
             }
 
             // Save the updated order
-            orderService.update(orderId, order);
+            orderService.updateOrder(orderId, order);
 
         } catch (Exception e) {
             System.err.println("Warning: Failed to update order " + orderId + ": " + e.getMessage());
