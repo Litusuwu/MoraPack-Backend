@@ -13,11 +13,11 @@ MoraPack is a package distribution and routing optimization system for a company
 
 ### Key Business Rules
 
-- **Headquarters**: Lima (Peru), Brussels (Belgium), Baku (Azerbaijan) - unlimited stock
+- **Headquarters**: Lima (Peru), Brussels (Belgium), Baku (Azerbaijan) - **UNLIMITED stock AND warehouse capacity** ⚠️ CRITICAL
 - **Delivery deadlines**: 2 days max (same continent), 3 days max (different continent)
 - **PACK airline agreement**: 0.5 days transport (same continent), 1 day (different continent)
 - **Flight capacity**: 200-300 packages (same continent), 250-400 (different continent)
-- **Warehouse capacity**: 600-1000 packages per airport
+- **Warehouse capacity**: 600-1000 packages per airport (EXCEPT main warehouses which are unlimited)
 - **Customer pickup window**: 2 hours max at destination airport
 - **Minimum layover time**: 1 hour for products in transit at intermediate destinations
 - **Products within an order** can arrive at different times, as long as all meet the deadline
@@ -121,7 +121,7 @@ src/main/java/com/system/morapack/
 2. **Algorithm Core** (`src/main/java/com/system/morapack/schemas/algorithm/`):
    - Two independent metaheuristic implementations (ALNS and TabuSearch)
    - Both solve the same routing optimization problem
-   - Input data from `data/` directory: `airportInfo.txt`, `flights.txt`, `products.txt`
+   - Input data from `data/` directory: `airportInfo.txt`, `flights.txt`, `_pedidos_{AIRPORT}_` files
 
 3. **Product Unitization** (Feature Toggle):
    - Controlled by `Constants.ENABLE_PRODUCT_UNITIZATION`
@@ -132,6 +132,33 @@ src/main/java/com/system/morapack/
    - Provides endpoints for frontend to track orders, flights, and status
    - Updates database with real-time changes
    - Intended to support three operational scenarios
+
+5. **Optimized Algorithm Workflow** ✨ NEW:
+   ```
+   Frontend → Algorithm Endpoint (POST /api/algorithm/daily or /weekly)
+        ↓
+   Load Orders (time-filtered, NO products loaded)
+        ↓
+   ALNS Algorithm Execution (orders tracked in memory)
+        ↓
+   Order Splitting (when capacity constraints apply, track splits in OrderSplit[])
+        ↓
+   Batch Persistence (single DB transaction at algorithm end)
+        ↓
+   Frontend Query Endpoints (GET current state from DB)
+   ```
+
+   **Key Optimizations:**
+   - **No product loading in input**: Products are created only at algorithm end when orders are split
+   - **In-memory order tracking**: When an order (e.g., 45 products) doesn't fit, split in half and track splits in array
+   - **Batch DB inserts**: All products persisted in single transaction after algorithm completes
+   - **Main warehouse unlimited capacity**: Lima, Brussels, Baku have no capacity limits (game changer)
+   - **Frontend queries DB**: No `productRoutes` in API response - frontend queries database directly
+
+6. **Data Source Abstraction** (`InputDataSource` interface):
+   - **FILE mode**: Read from `data/` directory (current default)
+   - **DATABASE mode**: Read from PostgreSQL via repositories (future use)
+   - Both support time window filtering for daily/weekly scenarios
 
 ## Critical Implementation Details
 
@@ -199,117 +226,225 @@ The system must support three distinct operational scenarios:
 
 ## Critical Issues to Address
 
-### Issue #1: Simulation Time Handling ⚠️ **HIGH PRIORITY**
+### Issue #1: Simulation Time Handling ✅ **COMPLETED**
 
-**Problem:**
-- Current implementation uses `LocalDateTime.now()` as reference time
-- No concept of simulation progression or time windows
-- Frontend cannot control which orders are processed
+**Status:** ✅ Fully implemented
 
-**Required Changes:**
-1. Accept simulation time parameters from frontend:
-   - Current date/time in simulation
-   - Duration/time window to process
-2. Filter orders based on simulation time window
-3. Use simulation time (not system time) for all calculations
+**Implemented Changes:**
+1. ✅ Added simulation time parameters to `AlgorithmRequest`:
+   ```java
+   private LocalDateTime simulationStartTime;
+   private LocalDateTime simulationEndTime;
+   private Integer simulationDurationDays;
+   private Double simulationDurationHours;
+   ```
+2. ✅ Updated `InputDataSource` interface with time window filtering:
+   ```java
+   ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
+                                     LocalDateTime simulationStartTime,
+                                     LocalDateTime simulationEndTime)
+   ```
+3. ✅ Updated `Solution.java` constructor to accept simulation time parameters
+4. ✅ All data sources (FILE and DATABASE) now support time window filtering
 
-**API Changes Needed:**
-```java
-// Add to AlgorithmRequest
-private LocalDateTime simulationStartTime;  // When simulation starts
-private LocalDateTime simulationEndTime;    // When simulation ends
-```
+**Files Changed:**
+- `schemas/AlgorithmRequest.java` - Added time parameters
+- `schemas/AlgorithmResultSchema.java` - Added simulation time fields to response
+- `schemas/algorithm/Input/InputDataSource.java` - Added time filtering method
+- `schemas/algorithm/Input/FileInputDataSource.java` - Implemented time filtering
+- `schemas/algorithm/Input/DatabaseInputDataSource.java` - Implemented time filtering
+- `schemas/algorithm/ALNS/Solution.java` - Added time window support
 
-### Issue #2: Order Data Loading ⚠️ **HIGH PRIORITY**
+### Issue #2: Order Data Loading ✅ **COMPLETED**
 
-**Problem:**
-- Old code reads single `products.txt` file
-- New structure has multiple files per airport (~36MB total)
-- Need to filter by time window to avoid loading all orders
+**Status:** ✅ Fully implemented with optimizations
 
-**Required Changes:**
-1. Update `InputProducts.java` to:
+**Implemented Changes:**
+1. ✅ Updated `InputProducts.java` to:
    - Read all `_pedidos_{AIRPORT}_` files in `backend/data/`
    - Parse new format: `id_pedido-aaaammdd-hh-mm-dest-###-IdClien`
    - Filter orders by simulation time window
-   - Handle multiple origin airports correctly
+   - Extract origin airport from filename
+   - **OPTIMIZATION**: Don't create ProductSchema objects in input (created at algorithm end)
 
-**Example:**
+**Parsing Implementation:**
 ```java
 // Parse: 000000001-20250102-01-38-EBCI-006-0007729
 String[] parts = line.split("-");
-String orderId = parts[0];           // "000000001"
-String dateStr = parts[1];           // "20250102"
-int hour = Integer.parseInt(parts[2]);     // 01
-int minute = Integer.parseInt(parts[3]);   // 38
-String destCode = parts[4];          // "EBCI"
-int quantity = Integer.parseInt(parts[5]); // 006
-String customerId = parts[6];        // "0007729"
+String orderId = parts[0];                // "000000001"
+String dateStr = parts[1];                // "20250102"
+int hour = Integer.parseInt(parts[2]);    // 01
+int minute = Integer.parseInt(parts[3]);  // 38
+String destCode = parts[4];               // "EBCI"
+int quantity = Integer.parseInt(parts[5]);// 006
+String customerId = parts[6];             // "0007729"
 
-// Convert to LocalDateTime
-LocalDateTime orderDate = LocalDateTime.parse(
-    dateStr + "T" + String.format("%02d:%02d:00", hour, minute)
-);
+LocalDateTime orderDate = LocalDateTime.of(year, month, day, hour, minute, 0);
 
 // Filter by simulation window
-if (orderDate.isBefore(simStart) || orderDate.isAfter(simEnd)) {
+if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
+    ordersFiltered++;
     continue; // Skip this order
 }
+
+// OPTIMIZATION: Don't create products here
+order.setProductSchemas(new ArrayList<>()); // Empty list
 ```
 
-### Issue #3: API Response Simplification
+**Files Changed:**
+- `schemas/algorithm/Input/InputProducts.java` - Complete rewrite for new format
+- `schemas/algorithm/Input/FileInputDataSource.java` - Uses new InputProducts constructor
 
-**Problem:**
-- Response includes `algorithmType` (only using ALNS)
-- Tabu-specific parameters in request
-- No clear simulation time info in response
+### Issue #3: API Response Simplification ✅ **COMPLETED**
 
-**Required Changes:**
-1. Remove `algorithmType` from `AlgorithmResultSchema`
-2. Add simulation window info to response:
+**Status:** ✅ Fully implemented
+
+**Implemented Changes:**
+1. ✅ Deprecated `algorithmType` field in `AlgorithmResultSchema` (only ALNS is used)
+2. ✅ Added simulation window info to response:
    ```java
    private LocalDateTime simulationStartTime;
    private LocalDateTime simulationEndTime;
    ```
-3. Add product-level metrics:
+3. ✅ Added product-level metrics:
    ```java
+   private Integer totalProducts;
    private Integer assignedProducts;
    private Integer unassignedProducts;
    ```
 
-### Issue #4: Scenario-Specific Endpoints
+**Files Changed:**
+- `schemas/AlgorithmResultSchema.java` - Added new fields, deprecated old ones
+- `bll/controller/AlgorithmController.java` - Updated to populate new fields
 
-**Problem:**
-- Single generic `/execute` endpoint
-- Frontend must manage scenario logic
-- No validation for scenario requirements
+### Issue #4: Scenario-Specific Endpoints ✅ **COMPLETED**
 
-**Required Changes:**
-Create dedicated endpoints:
-- `POST /api/algorithm/daily` - For incremental daily operations
-- `POST /api/algorithm/weekly` - For 7-day batch processing
-- `POST /api/algorithm/collapse` - For stress testing (future)
+**Status:** ✅ Fully implemented
+
+**Implemented Changes:**
+1. ✅ Created dedicated endpoints in `api/AlgorithmAPI.java`:
+   - `POST /api/algorithm/daily` - For incremental daily operations
+   - `POST /api/algorithm/weekly` - For 7-day batch processing
+   - Deprecated `POST /api/algorithm/execute` (legacy endpoint)
+
+2. ✅ Created corresponding controller methods in `AlgorithmController.java`:
+   - `executeDailyScenario(AlgorithmRequest)` - Handles time window calculation
+   - `executeWeeklyScenario(AlgorithmRequest)` - Defaults to 7 days
+   - Supports multiple duration formats (hours, days, explicit end time)
+
+**Endpoint Examples:**
+```bash
+# Daily scenario (30-minute incremental window)
+curl -X POST http://localhost:8080/api/algorithm/daily \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationHours": 0.5,
+    "useDatabase": false
+  }'
+
+# Weekly scenario (7-day batch)
+curl -X POST http://localhost:8080/api/algorithm/weekly \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationDays": 7,
+    "useDatabase": false
+  }'
+```
+
+**Files Changed:**
+- `api/AlgorithmAPI.java` - Added `/daily` and `/weekly` endpoints
+- `bll/controller/AlgorithmController.java` - Added scenario-specific methods
+
+### Issue #5: Algorithm Optimization ⚠️ **IN PROGRESS**
+
+**Status:** 🔄 Partially implemented
+
+**Completed:**
+1. ✅ **Unlimited main warehouse capacity** - Implemented in `Solution.java`:
+   ```java
+   private boolean isMainWarehouse(AirportSchema airportSchema) {
+       String cityName = airportSchema.getCitySchema().getName().toLowerCase();
+       return cityName.contains("lima") ||
+              cityName.contains("brusel") ||  // Brussels/Bruselas
+              cityName.contains("baku");
+   }
+   ```
+   - Main warehouses always allow package storage (no capacity check)
+   - This is a CRITICAL optimization for the algorithm
+
+2. ✅ **Product loading optimization** - No products created during input:
+   - `InputProducts.java` creates orders with empty product lists
+   - `DatabaseInputDataSource.java` skips product loading
+   - Products will be created at algorithm end when orders are split
+
+3. ✅ **Persistence service created** - `AlgorithmPersistenceService.java`:
+   - `OrderSplit` data structure for tracking splits in memory
+   - `persistSolution()` method for batch DB inserts
+   - Groups splits by order for efficient processing
+
+**Pending:**
+1. ⏳ **Order splitting logic in ALNS** - Need to add to `Solution.java`:
+   - When order doesn't fit in flight, split in half
+   - Track splits in `List<OrderSplit>` during algorithm execution
+   - Example: 45-product order → split into 22 + 23
+
+2. ⏳ **Integration with persistence service** - Need to update `AlgorithmController.java`:
+   - Call `persistSolution()` after algorithm completes
+   - Return DB insert results in API response
+
+3. ⏳ **Frontend query endpoints** - Need to create `OrderQueryAPI.java`:
+   - `GET /api/orders?timeWindow={start,end}` - Get orders in time window
+   - `GET /api/products/{orderId}` - Get product splits for order
+   - `GET /api/flights/status` - Get flight assignments
+
+**Files Changed:**
+- `schemas/algorithm/ALNS/Solution.java` - Added unlimited capacity logic
+- `bll/service/AlgorithmPersistenceService.java` - Created service
+
+**Files Pending:**
+- `schemas/algorithm/ALNS/Solution.java` - Add order splitting logic
+- `bll/controller/AlgorithmController.java` - Integrate persistence
+- `api/OrderQueryAPI.java` - Create query endpoints (NEW FILE)
 
 ## Current Development Tasks
 
 Priority order for implementation:
 
 1. ✅ **Update data format documentation** - COMPLETED
-2. 🔄 **Implement simulation time handling** - IN PROGRESS
-   - Update `AlgorithmRequest` to accept simulation time
-   - Update `InputProducts` to parse new format and filter by time
-   - Update `Solution` constructor to use simulation time
-3. ⏳ **Create scenario endpoints** - PENDING
-   - Add `/api/algorithm/daily` endpoint
-   - Add `/api/algorithm/weekly` endpoint
-4. ⏳ **Simplify API responses** - PENDING
-   - Remove algorithm type field
-   - Add simulation time info
-   - Add product-level metrics
-5. ⏳ **Optimize ALNS for scenarios** - PENDING
-   - Tune parameters for daily vs weekly
-   - Add proper product-level tracking
-   - Fix 1-hour layover constraint
+2. ✅ **Implement simulation time handling** - COMPLETED
+   - ✅ Update `AlgorithmRequest` to accept simulation time
+   - ✅ Update `InputProducts` to parse new format and filter by time
+   - ✅ Update `Solution` constructor to use simulation time
+3. ✅ **Create scenario endpoints** - COMPLETED
+   - ✅ Add `/api/algorithm/daily` endpoint
+   - ✅ Add `/api/algorithm/weekly` endpoint
+4. ✅ **Simplify API responses** - COMPLETED
+   - ✅ Remove algorithm type field (deprecated)
+   - ✅ Add simulation time info
+   - ✅ Add product-level metrics
+5. ✅ **Implement unlimited main warehouse capacity** - COMPLETED
+   - ✅ Add `isMainWarehouse()` helper in `Solution.java`
+   - ✅ Skip capacity checks for Lima, Brussels, Baku
+6. ✅ **Optimize product loading** - COMPLETED
+   - ✅ Remove product creation from input data sources
+   - ✅ Products will be created at algorithm end
+7. ✅ **Create persistence service** - COMPLETED
+   - ✅ Implement `AlgorithmPersistenceService.java`
+   - ✅ Add `OrderSplit` data structure
+   - ✅ Add batch DB insert methods
+8. 🔄 **Implement order splitting in ALNS** - IN PROGRESS
+   - ⏳ Add splitting logic when order doesn't fit
+   - ⏳ Track splits in memory during algorithm execution
+   - ⏳ Return splits to controller for persistence
+9. ⏳ **Integrate persistence with controller** - PENDING
+   - Call `persistSolution()` after algorithm completes
+   - Update API response with DB insert results
+10. ⏳ **Create frontend query endpoints** - PENDING
+    - Add `OrderQueryAPI.java` with query methods
+    - Implement time window queries
+    - Implement order/product status queries
 
 ## Data Files
 
@@ -362,7 +497,146 @@ Input data located in `backend/data/` directory:
 - The standalone `Main.java` runs algorithm comparisons without Spring
 - Algorithm execution time for weekly simulation should be 30-90 minutes (per requirements)
 - Frontend is in a separate project and consumes the REST API endpoints
-- Solution output format should be: `Map<Product, List<Flight>>` (not yet implemented)
+- Solution output format is: `Map<ProductSchema, List<FlightSchema>>` (algorithm level)
+- Database persistence uses `OrderSplit` data structure for batch inserts
+
+## Key Implementation Decisions
+
+### 1. Main Warehouse Unlimited Capacity (CRITICAL)
+
+**Decision:** Lima, Brussels, and Baku warehouses have unlimited capacity.
+
+**Rationale:**
+- These are the company headquarters with unlimited stock
+- Removing capacity constraints for main warehouses is a game-changer for the algorithm
+- Simplifies routing logic: packages can always be stored at origin
+- Implemented in `Solution.java` via `isMainWarehouse()` helper method
+
+**Implementation:**
+```java
+private boolean isMainWarehouse(AirportSchema airportSchema) {
+    String cityName = airportSchema.getCitySchema().getName().toLowerCase();
+    return cityName.contains("lima") ||
+           cityName.contains("brusel") ||  // Brussels/Bruselas
+           cityName.contains("baku");
+}
+
+// In capacity checks:
+if (isMainWarehouse(airportSchema)) {
+    return true; // Always allow
+}
+```
+
+### 2. Deferred Product Creation
+
+**Decision:** Products are NOT created during input data loading.
+
+**Rationale:**
+- Old approach: For 45-product order → create 45 DB rows immediately
+- New approach: Create orders only, split during algorithm, persist products at end
+- Avoids excessive DB calls during input phase
+- Enables batch persistence strategy (single transaction)
+- Products created when orders are split by algorithm (e.g., 45 → 22 + 23)
+
+**Implementation:**
+- `InputProducts.java`: Sets `order.setProductSchemas(new ArrayList<>())`
+- `DatabaseInputDataSource.java`: Skips product loading in `convertToOrderSchema()`
+- `AlgorithmPersistenceService.java`: Creates products from `OrderSplit[]` at algorithm end
+
+### 3. In-Memory Order Splitting
+
+**Decision:** Order splits tracked in memory during algorithm execution, persisted at end.
+
+**Rationale:**
+- Minimize database calls during algorithm execution
+- Track splits as they happen (e.g., order split in half when doesn't fit)
+- Batch insert all products in single transaction after algorithm completes
+- Improves performance for weekly scenario (many splits expected)
+
+**Implementation:**
+```java
+// Data structure (in AlgorithmPersistenceService.java)
+public static class OrderSplit {
+    private Integer orderId;
+    private Integer quantity;
+    private List<FlightSchema> assignedFlights;
+    private Status status;
+}
+
+// During algorithm: track splits
+List<OrderSplit> splits = new ArrayList<>();
+splits.add(new OrderSplit(orderId, quantity, assignedFlights));
+
+// After algorithm: batch persist
+int productsCreated = persistenceService.persistSolution(splits);
+```
+
+### 4. Frontend Queries Database Directly
+
+**Decision:** API response does NOT include `productRoutes` array. Frontend queries DB instead.
+
+**Rationale:**
+- Reduces API response size (no need to serialize entire solution)
+- Frontend already has DB access for real-time tracking
+- Enables real-time status updates (products, flights, orders)
+- Supports incremental updates in daily scenario
+
+**Required Endpoints (to be implemented):**
+```java
+GET /api/orders?startTime={time}&endTime={time}    // Orders in time window
+GET /api/products/{orderId}                         // Product splits for order
+GET /api/flights/status                             // Current flight assignments
+GET /api/warehouse/occupancy/{airportCode}          // Warehouse status
+```
+
+### 5. Simulation Time Window Filtering
+
+**Decision:** All data sources must support time window filtering.
+
+**Rationale:**
+- Order files total ~36MB (cannot load all at once)
+- Daily scenario: only load orders in 30-minute window
+- Weekly scenario: load 7 days of orders
+- Improves performance and memory usage
+- Enables incremental processing
+
+**Implementation:**
+- Interface: `InputDataSource.loadOrders(airports, startTime, endTime)`
+- File source: Parse order timestamp from filename and filter
+- Database source: SQL query with `WHERE orderDate BETWEEN ? AND ?`
+- Algorithm: Accept simulation time in constructor
+
+### 6. Order Data Format
+
+**Decision:** New multi-file format per airport with timestamp in order ID.
+
+**Format:** `id_pedido-aaaammdd-hh-mm-dest-###-IdClien`
+
+**Rationale:**
+- Scalability: Separate files per origin airport
+- Precision: Exact timestamp (date + hour + minute) for each order
+- Filtering: Easy to filter by time window during parsing
+- Origin tracking: Airport code in filename
+
+**Example:**
+- File: `_pedidos_LDZA_` (orders from Zagreb airport)
+- Line: `000000001-20250102-01-38-EBCI-006-0007729`
+- Parsed: Order #1, created Jan 2, 2025 at 01:38, to EBCI, 6 products, customer #7729
+
+### 7. Scenario-Specific Endpoints
+
+**Decision:** Separate endpoints for daily and weekly scenarios.
+
+**Rationale:**
+- Clear separation of concerns
+- Different validation rules per scenario
+- Easier to optimize parameters per scenario
+- Better error messages for scenario-specific issues
+
+**Endpoints:**
+- `POST /api/algorithm/daily` - Incremental 30-minute windows, runs indefinitely
+- `POST /api/algorithm/weekly` - 7-day batch processing, 30-90 minute execution
+- `POST /api/algorithm/collapse` - Future: stress test until system breaks
 
 ## Problem Statement
 
