@@ -49,6 +49,9 @@ public class DataLoadService {
     // Counter for newly created customers during load operation
     private int customersCreated = 0;
 
+    // Batch size for JDBC inserts (optimal range: 1000-5000)
+    private static final int JDBC_BATCH_SIZE = 2000;
+
     /**
      * Load orders from _pedidos_{AIRPORT}_ files into database
      *
