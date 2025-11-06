@@ -87,6 +87,11 @@ public class AlgorithmPersistenceService {
                 product.setName("Product-Split-" + orderId + "-" + productsCreated);
                 product.setStatus(mapStatusToPackageStatus(split.getStatus()));
 
+                // Set default weight and volume (1 unit per product)
+                // These represent standardized package units
+                product.setWeight(1.0);  // 1 kg per unit
+                product.setVolume(1.0);  // 1 m³ per unit
+
                 // Set order reference
                 com.system.morapack.dao.morapack_psql.model.Order orderEntity =
                     new com.system.morapack.dao.morapack_psql.model.Order();
