@@ -225,7 +225,7 @@ public class DataLoadService {
         System.out.println("Initializing caches...");
 
         // Load all cities
-        List<City> cities = cityService.fetch(null);
+        List<City> cities = cityService.fetchCities(null);
         for (City city : cities) {
             // Cache by airport code (if available)
             // TODO: Implement proper airport code mapping
@@ -250,7 +250,7 @@ public class DataLoadService {
         // Try to find in database
         // TODO: Implement proper airport code to city mapping
         // For now, return first city as fallback
-        List<City> cities = cityService.fetch(null);
+        List<City> cities = cityService.fetchCities(null);
         if (!cities.isEmpty()) {
             City city = cities.get(0);
             cityCache.put(airportCode, city);
@@ -269,19 +269,15 @@ public class DataLoadService {
         }
 
         // Try to find existing customer
-        List<Customer> allCustomers = customerService.fetch(null);
-        for (Customer customer : allCustomers) {
-            if (customer.getName() != null && customer.getName().contains(customerId)) {
-                customerCache.put(customerId, customer);
-                return customer;
-            }
-        }
+        List<Customer> allCustomers = customerService.fetchCustomers(null);
 
-        // Return first customer as fallback
-        // TODO: Create new customer if needed
+        // TODO: Implement proper customer matching by ID
+        // Customer entity doesn't have a name field - it has phone, fiscalAddress, and person (User)
+        // For now, just return first customer as fallback
         if (!allCustomers.isEmpty()) {
             Customer customer = allCustomers.get(0);
             customerCache.put(customerId, customer);
+            System.out.println("Warning: Using fallback customer (ID: " + customer.getId() + ") for customerId: " + customerId);
             return customer;
         }
 

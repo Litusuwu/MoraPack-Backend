@@ -1539,10 +1539,10 @@ public class Solution {
      */
     private boolean attemptOrderSplit(OrderSchema pkg, ArrayList<FlightSchema> route,
                                      HashMap<OrderSchema, ArrayList<FlightSchema>> currentSolution) {
-        // Get product count (default to order quantity if no products)
+        // Get product count (default to 1 if no products loaded)
         int totalQuantity = pkg.getProductSchemas() != null && !pkg.getProductSchemas().isEmpty()
                           ? pkg.getProductSchemas().size()
-                          : pkg.getQuantity();
+                          : 1; // Default quantity if products not loaded
 
         // Don't split if quantity is 1 or too small
         if (totalQuantity <= 1) {
@@ -1637,7 +1637,8 @@ public class Solution {
     private OrderSchema createPartialOrder(OrderSchema original, int quantity) {
         OrderSchema partial = new OrderSchema();
         partial.setId(original.getId());
-        partial.setQuantity(quantity);
+        // Note: OrderSchema doesn't have quantity field
+        // Quantity is represented by the number of products in productSchemas list
         partial.setOrderDate(original.getOrderDate());
         partial.setDeliveryDeadline(original.getDeliveryDeadline());
         partial.setCurrentLocation(original.getCurrentLocation());

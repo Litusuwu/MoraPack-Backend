@@ -85,7 +85,11 @@ public class AlgorithmPersistenceService {
                 // Create Product record for this split
                 Product product = new Product();
                 product.setName("Product-Split-" + orderId + "-" + productsCreated);
-                product.setStatus(split.getStatus());
+
+                // Set default weight and volume (placeholder values)
+                // TODO: Get actual weight/volume from order or configuration
+                product.setWeight(1.0);
+                product.setVolume(1.0);
 
                 // Set order reference
                 com.system.morapack.dao.morapack_psql.model.Order orderEntity =
@@ -93,17 +97,9 @@ public class AlgorithmPersistenceService {
                 orderEntity.setId(orderId);
                 product.setOrder(orderEntity);
 
-                // Build flight path string
-                StringBuilder flightPath = new StringBuilder();
-                for (FlightSchema flight : split.getAssignedFlights()) {
-                    if (flightPath.length() > 0) {
-                        flightPath.append(" -> ");
-                    }
-                    flightPath.append(flight.getOriginAirportSchema().getCodeIATA())
-                              .append("-")
-                              .append(flight.getDestinationAirportSchema().getCodeIATA());
-                }
-                product.setAssignedFlight(flightPath);
+                // NOTE: Product model doesn't have status or assignedFlight fields
+                // Flight assignment information is tracked in algorithm solution only
+                // If needed, add these fields to Product model or create separate FlightAssignment table
 
                 // Save product
                 productService.createProduct(product);
@@ -128,15 +124,10 @@ public class AlgorithmPersistenceService {
      */
     @Transactional
     public void updateOrderStatus(Integer orderId, PackageStatus status) {
-        com.system.morapack.dao.morapack_psql.model.Order order =
-            orderService.fetchOrders(null).stream()
-                .filter(o -> o.getId().equals(orderId))
-                .findFirst()
-                .orElse(null);
-
-        if (order != null) {
-            order.setStatus(status);
-            orderService.save(order);
+        try {
+            orderService.updateStatus(orderId, status);
+        } catch (Exception e) {
+            System.err.println("Warning: Failed to update order " + orderId + ": " + e.getMessage());
         }
     }
 
