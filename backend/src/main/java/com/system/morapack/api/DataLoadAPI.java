@@ -127,12 +127,10 @@ public class DataLoadAPI {
     }
 
     /**
-     * Get default data directory path
+     * Get default data directory path for order files
      */
     private String getDefaultDataDirectory() {
-        // Get directory from PRODUCTS_FILE_PATH (which is in the data directory)
-        String productsPath = Constants.PRODUCTS_FILE_PATH;
-        java.io.File productsFile = new java.io.File(productsPath);
-        return productsFile.getParent();
+        // Return the directory containing order files (_pedidos_{AIRPORT}_.txt)
+        return Constants.ORDER_FILES_DIRECTORY;
     }
 }

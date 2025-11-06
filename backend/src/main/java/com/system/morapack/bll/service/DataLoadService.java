@@ -85,11 +85,11 @@ public class DataLoadService {
         }
 
         File[] orderFiles = dataDir.listFiles((dir, name) ->
-            name.startsWith("_pedidos_") && name.endsWith("_"));
+            name.startsWith("_pedidos_") && name.endsWith("_.txt"));
 
         if (orderFiles == null || orderFiles.length == 0) {
             result.success = false;
-            result.errorMessage = "No order files found matching pattern _pedidos_{AIRPORT}_";
+            result.errorMessage = "No order files found matching pattern _pedidos_{AIRPORT}_.txt in directory: " + dataDirectoryPath;
             return result;
         }
 
@@ -100,7 +100,10 @@ public class DataLoadService {
 
         for (File orderFile : orderFiles) {
             String fileName = orderFile.getName();
-            String originAirportCode = fileName.replace("_pedidos_", "").replace("_", "");
+            // Extract airport code from filename: _pedidos_LATI_.txt -> LATI
+            String originAirportCode = fileName
+                .replace("_pedidos_", "")
+                .replace("_.txt", "");
 
             System.out.println("\nProcessing file: " + fileName + " (origin: " + originAirportCode + ")");
 

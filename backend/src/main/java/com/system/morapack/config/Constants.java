@@ -5,6 +5,7 @@ public class Constants {
     public static final String AIRPORT_INFO_FILE_PATH = "data/airportInfo.txt";
     public static final String FLIGHTS_FILE_PATH = "data/flights.txt";
     public static final String PRODUCTS_FILE_PATH = "data/products.txt";
+    public static final String ORDER_FILES_DIRECTORY = "data/products";  // Directory containing _pedidos_{AIRPORT}_.txt files
     
     // Algorithm constants
 
