@@ -3,11 +3,14 @@ package com.system.morapack.schemas.algorithm.Input;
 import com.system.morapack.schemas.*;
 import com.system.morapack.schemas.AirportSchema;
 import com.system.morapack.schemas.OrderSchema;
+import com.system.morapack.config.Constants;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,17 +19,42 @@ import java.util.Random;
 
 public class InputProducts {
     private ArrayList<OrderSchema> orderSchemas;
-    private final String filePath;
+    private final String dataDirectoryPath;
     private ArrayList<AirportSchema> airportSchemas;
     private Map<String, AirportSchema> airportMap;
     private Random random;
-    private int productId = 1;
+    private int productIdCounter = 1;
+    private int orderIdCounter = 1;
 
-    public InputProducts(String filePath, ArrayList<AirportSchema> airportSchemas) {
-        this.filePath = filePath;
+    // NEW: Simulation time window for filtering orders
+    private LocalDateTime simulationStartTime;
+    private LocalDateTime simulationEndTime;
+
+    /**
+     * Constructor for reading from data directory with simulation time window
+     */
+    public InputProducts(String dataDirectoryPath, ArrayList<AirportSchema> airportSchemas,
+                        LocalDateTime simulationStartTime, LocalDateTime simulationEndTime) {
+        this.dataDirectoryPath = dataDirectoryPath;
         this.orderSchemas = new ArrayList<>();
         this.airportSchemas = airportSchemas;
         this.random = new Random();
+        this.simulationStartTime = simulationStartTime;
+        this.simulationEndTime = simulationEndTime;
+        createAirportMap();
+    }
+
+    /**
+     * Legacy constructor (uses all orders, no time filtering)
+     */
+    @Deprecated
+    public InputProducts(String filePath, ArrayList<AirportSchema> airportSchemas) {
+        this.dataDirectoryPath = new File(filePath).getParent();
+        this.orderSchemas = new ArrayList<>();
+        this.airportSchemas = airportSchemas;
+        this.random = new Random();
+        this.simulationStartTime = null; // No filtering
+        this.simulationEndTime = null;
         createAirportMap();
     }
 
@@ -37,175 +65,205 @@ public class InputProducts {
         }
     }
 
+    /**
+     * Read all order files from the data directory
+     * Files follow pattern: _pedidos_{AIRPORT_CODE}_
+     * Format: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
+     */
     public ArrayList<OrderSchema> readProducts() {
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            int packageId = 1;
-            
-            while ((line = reader.readLine()) != null) {
-                // Skip empty lines
-                if (line.trim().isEmpty()) {
-                    continue;
-                }
-                
-                // Parse product data
-                // Format: dd-hh-mm-dest-###-IdClien
-                // dd: días de prioridad (01/04/12/24)
-                // hh: horas (01-23)
-                // mm: minutos (01-59) 
-                // dest: código aeropuerto destino
-                // ###: cantidad de productos (001-999)
-                // IdClien: ID cliente (7 posiciones numéricas)
-                String[] parts = line.trim().split("\\s+");
-                if (parts.length >= 6) {
-                    int priorityDays = Integer.parseInt(parts[0]);
-                    int hour = Integer.parseInt(parts[1]);
-                    int minute = Integer.parseInt(parts[2]);
-                    String destinationAirportCode = parts[3];
-                    int productQuantity = Integer.parseInt(parts[4]); // Cantidad de productos en el paquete
-                    int customerId = Integer.parseInt(parts[5]); // ID del cliente
-                    
-                    // Find destination airport
-                    AirportSchema destinationAirportSchema = airportMap.get(destinationAirportCode);
-                    
-                    if (destinationAirportSchema != null) {
-                        // Create customerSchema
-                        CustomerSchema customerSchema = new CustomerSchema();
-                        customerSchema.setId(customerId);
-                        customerSchema.setName("CustomerSchema " + customerId);
-                        customerSchema.setEmail("customerSchema" + customerId + "@example.com");
-                        customerSchema.setDeliveryCitySchema(destinationAirportSchema.getCitySchema());
-                        
-                        // Calculate order date and delivery deadline
-                        LocalDateTime now = LocalDateTime.now();
-                        LocalDateTime orderDate = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0);
-                        
-                        // If the orderDate is in the past, set it to tomorrow
-                        if (orderDate.isBefore(now)) {
-                            orderDate = orderDate.plusDays(1);
+        File dataDir = new File(dataDirectoryPath);
+
+        if (!dataDir.exists() || !dataDir.isDirectory()) {
+            System.err.println("ERROR: Data directory not found: " + dataDirectoryPath);
+            return orderSchemas;
+        }
+
+        // Find all files matching _pedidos_{AIRPORT}_
+        File[] orderFiles = dataDir.listFiles((dir, name) ->
+            name.startsWith("_pedidos_") && name.endsWith("_"));
+
+        if (orderFiles == null || orderFiles.length == 0) {
+            System.err.println("WARNING: No order files found in " + dataDirectoryPath);
+            System.err.println("Looking for files matching pattern: _pedidos_{AIRPORT}_");
+            return orderSchemas;
+        }
+
+        System.out.println("========================================");
+        System.out.println("LOADING ORDERS FROM DATA DIRECTORY");
+        System.out.println("Directory: " + dataDirectoryPath);
+        System.out.println("Found " + orderFiles.length + " order files");
+        if (simulationStartTime != null && simulationEndTime != null) {
+            System.out.println("Time window: " + simulationStartTime + " to " + simulationEndTime);
+        } else {
+            System.out.println("Time window: ALL ORDERS (no filtering)");
+        }
+        System.out.println("========================================");
+
+        int totalLinesRead = 0;
+        int ordersLoaded = 0;
+        int ordersFiltered = 0;
+
+        // Read each order file
+        for (File orderFile : orderFiles) {
+            // Extract origin airport code from filename
+            // Example: _pedidos_LDZA_ -> LDZA
+            String fileName = orderFile.getName();
+            String originAirportCode = fileName.replace("_pedidos_", "").replace("_", "");
+
+            AirportSchema originAirport = airportMap.get(originAirportCode);
+            if (originAirport == null) {
+                System.err.println("WARNING: Unknown origin airport code: " + originAirportCode + " in file: " + fileName);
+                continue;
+            }
+
+            System.out.println("Reading orders from: " + fileName + " (origin: " + originAirportCode + ")");
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(orderFile))) {
+                String line;
+                int linesInFile = 0;
+                int ordersInFile = 0;
+
+                while ((line = reader.readLine()) != null) {
+                    totalLinesRead++;
+                    linesInFile++;
+
+                    // Skip empty lines
+                    if (line.trim().isEmpty()) {
+                        continue;
+                    }
+
+                    // Parse order data
+                    // Format: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
+                    // Example: 000000001-20250102-01-38-EBCI-006-0007729
+                    String[] parts = line.trim().split("-");
+
+                    if (parts.length != 7) {
+                        System.err.println("WARNING: Invalid line format (expected 7 parts, got " + parts.length + "): " + line);
+                        continue;
+                    }
+
+                    try {
+                        String orderId = parts[0];
+                        String dateStr = parts[1];          // aaaammdd (e.g., 20250102)
+                        int hour = Integer.parseInt(parts[2]);
+                        int minute = Integer.parseInt(parts[3]);
+                        String destinationAirportCode = parts[4];
+                        int productQuantity = Integer.parseInt(parts[5]);
+                        String customerId = parts[6];
+
+                        // Parse order creation date and time
+                        // Format: aaaammdd -> yyyy-MM-dd
+                        int year = Integer.parseInt(dateStr.substring(0, 4));
+                        int month = Integer.parseInt(dateStr.substring(4, 6));
+                        int day = Integer.parseInt(dateStr.substring(6, 8));
+
+                        LocalDateTime orderDate = LocalDateTime.of(year, month, day, hour, minute, 0);
+
+                        // FILTER: Skip orders outside simulation time window
+                        if (simulationStartTime != null && simulationEndTime != null) {
+                            if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
+                                ordersFiltered++;
+                                continue; // Skip this order
+                            }
                         }
-                        
-                        // Set delivery deadline based on priority days
-                        LocalDateTime deliveryDeadline;
-                        switch (priorityDays) {
-                            case 1:  // Highest priority - 1 day
-                                deliveryDeadline = orderDate.plus(1, ChronoUnit.DAYS);
-                                break;
-                            case 4:  // Medium priority - 4 days
-                                deliveryDeadline = orderDate.plus(4, ChronoUnit.DAYS);
-                                break;
-                            case 12: // Low priority - 12 days
-                                deliveryDeadline = orderDate.plus(12, ChronoUnit.DAYS);
-                                break;
-                            case 24: // Lowest priority - 24 days
-                                deliveryDeadline = orderDate.plus(24, ChronoUnit.DAYS);
-                                break;
-                            default: // Default to 7 days
-                                deliveryDeadline = orderDate.plus(7, ChronoUnit.DAYS);
-                                break;
+
+                        // Find destination airport
+                        AirportSchema destinationAirport = airportMap.get(destinationAirportCode);
+                        if (destinationAirport == null) {
+                            System.err.println("WARNING: Unknown destination airport: " + destinationAirportCode);
+                            continue;
                         }
-                        
-                        // Create OrderSchema object
-                        OrderSchema pkg = new OrderSchema();
-                        pkg.setId(packageId++);
-                        pkg.setCustomerSchema(customerSchema);
-                        pkg.setDestinationCitySchema(destinationAirportSchema.getCitySchema());
-                        pkg.setOrderDate(orderDate);
-                        pkg.setDeliveryDeadline(deliveryDeadline);
-                        pkg.setStatus(PackageStatus.PENDING);
-                        
-                        // Create productSchemas for this package
-                        ArrayList<ProductSchema> productSchemas = new ArrayList<>();
-                        for (int i = 0; i < productQuantity; i++) {
-                            ProductSchema productSchema = new ProductSchema();
-                            productSchema.setId(productId++);
-                            productSchema.setOrderId(packageId - 1); // SET ORDER ID! (packageId was already incremented)
-                            productSchema.setStatus(Status.NOT_ASSIGNED); // ProductSchema not assigned initially
-                            productSchemas.add(productSchema);
-                        }
-                        pkg.setProductSchemas(productSchemas);
-                        
-                        // Assume the package starts at a random warehouse in a different continent
-                        CitySchema currentLocation = getRandomWarehouseLocation(destinationAirportSchema.getCitySchema().getContinent());
-                        pkg.setCurrentLocation(currentLocation);
-                        
-                        // Set priority based on delivery time window
+
+                        // Calculate delivery deadline based on route type
+                        CitySchema originCity = originAirport.getCitySchema();
+                        CitySchema destinationCity = destinationAirport.getCitySchema();
+                        boolean sameContinentRoute = originCity.getContinent() == destinationCity.getContinent();
+
+                        // MoraPack delivery promise: 2 days (same continent), 3 days (different continent)
+                        int deliveryDays = sameContinentRoute ? 2 : 3;
+                        LocalDateTime deliveryDeadline = orderDate.plusDays(deliveryDays);
+
+                        // Create customer
+                        CustomerSchema customer = new CustomerSchema();
+                        customer.setId(Integer.parseInt(customerId));
+                        customer.setName("Customer " + customerId);
+                        customer.setEmail("customer" + customerId + "@morapack.com");
+                        customer.setDeliveryCitySchema(destinationCity);
+
+                        // Create order
+                        OrderSchema order = new OrderSchema();
+                        order.setId(orderIdCounter++);
+                        order.setName("Order-" + orderId);
+                        order.setCustomerSchema(customer);
+                        order.setCurrentLocation(originCity);
+                        order.setDestinationCitySchema(destinationCity);
+                        order.setOrderDate(orderDate);
+                        order.setDeliveryDeadline(deliveryDeadline);
+                        order.setStatus(PackageStatus.PENDING);
+
+                        // Calculate priority based on time window
                         double priorityValue = calculatePriority(orderDate, deliveryDeadline);
-                        pkg.setPriority(priorityValue);
-                        
-                        orderSchemas.add(pkg);
+                        order.setPriority(priorityValue);
+
+                        // Create products for this order
+                        ArrayList<ProductSchema> products = new ArrayList<>();
+                        for (int i = 0; i < productQuantity; i++) {
+                            ProductSchema product = new ProductSchema();
+                            product.setId(productIdCounter++);
+                            product.setOrderId(order.getId());
+                            product.setName("Product-" + product.getId());
+                            product.setStatus(Status.NOT_ASSIGNED);
+                            products.add(product);
+                        }
+                        order.setProductSchemas(products);
+
+                        orderSchemas.add(order);
+                        ordersInFile++;
+                        ordersLoaded++;
+
+                    } catch (Exception e) {
+                        System.err.println("ERROR parsing line: " + line);
+                        System.err.println("Error: " + e.getMessage());
                     }
                 }
+
+                System.out.println("  → Processed " + linesInFile + " lines, loaded " + ordersInFile + " orders");
+
+            } catch (IOException e) {
+                System.err.println("ERROR reading file " + orderFile.getName() + ": " + e.getMessage());
+                e.printStackTrace();
             }
-            
-        } catch (IOException e) {
-            System.err.println("Error reading product data: " + e.getMessage());
-            e.printStackTrace();
         }
-        
+
+        System.out.println("========================================");
+        System.out.println("ORDER LOADING SUMMARY");
+        System.out.println("Total lines read: " + totalLinesRead);
+        System.out.println("Orders loaded: " + ordersLoaded);
+        System.out.println("Orders filtered (outside time window): " + ordersFiltered);
+        System.out.println("Total products created: " + (productIdCounter - 1));
+        System.out.println("========================================");
+
         return orderSchemas;
     }
-    
-    private CitySchema getRandomWarehouseLocation(Continent destinationContinent) {
-        // MoraPack has headquarters in Lima (Peru), Brussels (Belgium), and Baku (Azerbaijan)
-        // Packages must start from one of these three locations with unlimited stock
-        
-        ArrayList<CitySchema> moraPackWarehouses = new ArrayList<>();
-        
-        // Find MoraPack warehouse cities
-        for (AirportSchema airportSchema : airportSchemas) {
-            CitySchema citySchema = airportSchema.getCitySchema();
-            String cityName = citySchema.getName();
-            
-            if (cityName.equals("Lima") || cityName.equals("Bruselas") || cityName.equals("Baku") ||
-                cityName.contains("Lima") || cityName.contains("Bruselas") || cityName.contains("Baku")) {
-                // Prefer warehouses in different continent than destination to maximize coverage
-                if (citySchema.getContinent() != destinationContinent) {
-                    moraPackWarehouses.add(citySchema);
-                }
-            }
-        }
-        
-        // If no warehouses in different continent, allow any MoraPack warehouse
-        if (moraPackWarehouses.isEmpty()) {
-            for (AirportSchema airportSchema : airportSchemas) {
-                CitySchema citySchema = airportSchema.getCitySchema();
-                String cityName = citySchema.getName();
-                
-                if (cityName.equals("Lima") || cityName.equals("Bruselas") || cityName.equals("Baku") ||
-                    cityName.contains("Lima") || cityName.contains("Bruselas") || cityName.contains("Baku")) {
-                    moraPackWarehouses.add(citySchema);
-                }
-            }
-        }
-        
-        // If somehow no MoraPack warehouses found (shouldn't happen), fallback to Lima
-        if (moraPackWarehouses.isEmpty()) {
-            System.err.println("Warning: No MoraPack warehouses found, using fallback");
-            for (AirportSchema airportSchema : airportSchemas) {
-                if (airportSchema.getCitySchema().getName().contains("Lima")) {
-                    return airportSchema.getCitySchema();
-                }
-            }
-        }
-        
-        // Return random MoraPack warehouse
-        return moraPackWarehouses.get(random.nextInt(moraPackWarehouses.size()));
-    }
-    
+
+    /**
+     * Calculate priority based on delivery time window
+     * Shorter time windows get higher priority
+     */
     private double calculatePriority(LocalDateTime orderDate, LocalDateTime deliveryDeadline) {
-        // Calculate priority based on time window
         long hours = ChronoUnit.HOURS.between(orderDate, deliveryDeadline);
-        
+
         // Normalize priority: shorter delivery windows get higher priority (1.0 is highest)
         if (hours <= 24) {
             return 1.0; // Highest priority for 1-day delivery
+        } else if (hours <= 48) {
+            return 0.9; // Very high priority for 2-day delivery
+        } else if (hours <= 72) {
+            return 0.8; // High priority for 3-day delivery
         } else if (hours <= 96) {
-            return 0.75; // High priority for 4-day delivery
-        } else if (hours <= 288) {
-            return 0.5; // Medium priority for 12-day delivery
+            return 0.6; // Medium priority for 4-day delivery
         } else {
-            return 0.25; // Low priority for 24-day delivery
+            return 0.4; // Lower priority for longer deliveries
         }
     }
 }
