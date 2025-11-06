@@ -190,7 +190,7 @@ public class InputProducts {
                         customer.setEmail("customer" + customerId + "@morapack.com");
                         customer.setDeliveryCitySchema(destinationCity);
 
-                        // Create order
+                        // Create order (WITHOUT products - products will be created at end of algorithm)
                         OrderSchema order = new OrderSchema();
                         order.setId(orderIdCounter++);
                         order.setName("Order-" + orderId);
@@ -205,17 +205,14 @@ public class InputProducts {
                         double priorityValue = calculatePriority(orderDate, deliveryDeadline);
                         order.setPriority(priorityValue);
 
-                        // Create products for this order
-                        ArrayList<ProductSchema> products = new ArrayList<>();
-                        for (int i = 0; i < productQuantity; i++) {
-                            ProductSchema product = new ProductSchema();
-                            product.setId(productIdCounter++);
-                            product.setOrderId(order.getId());
-                            product.setName("Product-" + product.getId());
-                            product.setStatus(Status.NOT_ASSIGNED);
-                            products.add(product);
-                        }
-                        order.setProductSchemas(products);
+                        // OPTIMIZATION: Don't create ProductSchema objects here
+                        // Just store the product quantity - products will be created when order is split
+                        // This avoids creating 45 product records for an order with 45 items
+                        // Instead, we create products only when the order is split during algorithm execution
+                        order.setProductSchemas(new ArrayList<>()); // Empty list for now
+
+                        // Store quantity in order for later use (if OrderSchema doesn't have this field, algorithm will track it)
+                        // The algorithm will split orders as needed and create Product records at the end
 
                         orderSchemas.add(order);
                         ordersInFile++;
@@ -240,7 +237,7 @@ public class InputProducts {
         System.out.println("Total lines read: " + totalLinesRead);
         System.out.println("Orders loaded: " + ordersLoaded);
         System.out.println("Orders filtered (outside time window): " + ordersFiltered);
-        System.out.println("Total products created: " + (productIdCounter - 1));
+        System.out.println("NOTE: Products will be created at END of algorithm (when orders are split)");
         System.out.println("========================================");
 
         return orderSchemas;

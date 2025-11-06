@@ -1417,6 +1417,12 @@ public class Solution {
             if (destinationAirportSchema == null || destinationAirportSchema.getWarehouse() == null) {
                 return false;
             }
+
+            // CRITICAL: Main warehouses (Lima, Brussels, Baku) have unlimited capacity
+            if (isMainWarehouse(destinationAirportSchema)) {
+                return true; // Always has capacity
+            }
+
             int productCount = pkg.getProductSchemas() != null ? pkg.getProductSchemas().size() : 1;
             int currentOccupancy = warehouseOccupancy.getOrDefault(destinationAirportSchema, 0);
             int maxCapacity = destinationAirportSchema.getWarehouse().getMaxCapacity();
@@ -1438,7 +1444,12 @@ public class Solution {
                 return false;
             }
 
-            // Validar capacidad de este almacén
+            // CRITICAL: Main warehouses (Lima, Brussels, Baku) have unlimited capacity
+            if (isMainWarehouse(arrivalAirport)) {
+                continue; // Skip capacity check for main warehouses
+            }
+
+            // Validar capacidad de este almacén (only for non-main warehouses)
             int currentOccupancy = warehouseOccupancy.getOrDefault(arrivalAirport, 0);
             int maxCapacity = arrivalAirport.getWarehouse().getMaxCapacity();
 
@@ -2844,8 +2855,34 @@ public class Solution {
     }
     
     /**
+     * Check if an airport is a main MoraPack warehouse with unlimited capacity
+     * Main warehouses: Lima, Brussels (Bruselas), Baku
+     *
+     * @param airportSchema Airport to check
+     * @return true if it's a main warehouse with unlimited capacity
+     */
+    private boolean isMainWarehouse(AirportSchema airportSchema) {
+        if (airportSchema == null || airportSchema.getCitySchema() == null) {
+            return false;
+        }
+
+        String cityName = airportSchema.getCitySchema().getName();
+        if (cityName == null) {
+            return false;
+        }
+
+        // Check for main warehouse cities (case-insensitive)
+        String cityLower = cityName.toLowerCase();
+        return cityLower.contains("lima") ||
+               cityLower.contains("brusel") ||  // Brussels/Bruselas
+               cityLower.contains("baku");
+    }
+
+    /**
      * Agrega ocupación temporal a un aeropuerto durante un período de tiempo.
-     * 
+     *
+     * IMPORTANT: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
+     *
      * @param airportSchema aeropuerto donde agregar ocupación
      * @param startMinute minuto de inicio (0-1439)
      * @param durationMinutes duración en minutos
@@ -2856,10 +2893,24 @@ public class Solution {
         if (airportSchema == null || airportSchema.getWarehouse() == null) {
             return false;
         }
-        
+
+        // CRITICAL: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
+        if (isMainWarehouse(airportSchema)) {
+            // Just track occupancy for statistics, but don't enforce limit
+            int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
+            final int TOTAL_MINUTES = HORIZON_DAYS * 24 * 60;
+            int clampedStart = Math.max(0, Math.min(startMinute, TOTAL_MINUTES - 1));
+            int clampedEnd = Math.max(0, Math.min(startMinute + durationMinutes, TOTAL_MINUTES));
+            for (int minute = clampedStart; minute < clampedEnd; minute++) {
+                occupancyArray[minute] += productCount;
+            }
+            return true; // Always allow - unlimited capacity
+        }
+
+        // For non-main warehouses, enforce capacity limits
         int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
         int maxCapacity = airportSchema.getWarehouse().getMaxCapacity();
-        
+
         // CORRECCIÓN: Verificar y agregar ocupación para cada minuto del período (4 días)
         final int TOTAL_MINUTES = HORIZON_DAYS * 24 * 60;
         int clampedStart = Math.max(0, Math.min(startMinute, TOTAL_MINUTES - 1));
@@ -2870,7 +2921,7 @@ public class Solution {
                 return false; // Violación de capacidad
             }
         }
-        
+
         return true;
     }
     

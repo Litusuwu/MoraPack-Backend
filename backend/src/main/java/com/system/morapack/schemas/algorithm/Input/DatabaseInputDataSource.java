@@ -267,16 +267,10 @@ public class DatabaseInputDataSource implements InputDataSource {
             orderSchema.setCustomerSchema(customerSchema);
         }
 
-        // Load and convert products for this order using ProductService
-        List<Product> products = productService.getProductsByOrder(order.getId());
-        ArrayList<ProductSchema> productSchemas = new ArrayList<>();
-
-        for (Product product : products) {
-            ProductSchema productSchema = convertToProductSchema(product);
-            productSchemas.add(productSchema);
-        }
-
-        orderSchema.setProductSchemas(productSchemas);
+        // OPTIMIZATION: Don't load products here - they will be created at the end of algorithm
+        // Products are created only when orders are split during algorithm execution
+        // This avoids loading unnecessary data and reduces DB calls
+        orderSchema.setProductSchemas(new ArrayList<>()); // Empty list for now
 
         return orderSchema;
     }
