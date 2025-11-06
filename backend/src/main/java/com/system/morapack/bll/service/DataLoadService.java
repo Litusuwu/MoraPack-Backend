@@ -23,8 +23,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Service for loading order data from files into the database
@@ -95,8 +97,9 @@ public class DataLoadService {
 
         System.out.println("Found " + orderFiles.length + " order files");
 
-        // Load orders from each file
-        List<Order> ordersToCreate = new ArrayList<>();
+        // PHASE 1: Parse files and collect unique customer IDs
+        List<ParsedOrderData> parsedOrders = new ArrayList<>();
+        Set<String> uniqueCustomerIds = new HashSet<>();
 
         for (File orderFile : orderFiles) {
             String fileName = orderFile.getName();
@@ -117,18 +120,19 @@ public class DataLoadService {
                     if (line.isEmpty()) continue;
 
                     try {
-                        Order order = parseOrderLine(line, originAirportCode);
+                        ParsedOrderData orderData = parseOrderLineToData(line, originAirportCode);
 
                         // Filter by time window if specified
                         if (simulationStartTime != null && simulationEndTime != null) {
-                            if (order.getCreationDate().isBefore(simulationStartTime) ||
-                                order.getCreationDate().isAfter(simulationEndTime)) {
+                            if (orderData.orderDate.isBefore(simulationStartTime) ||
+                                orderData.orderDate.isAfter(simulationEndTime)) {
                                 result.ordersFiltered++;
                                 continue;
                             }
                         }
 
-                        ordersToCreate.add(order);
+                        parsedOrders.add(orderData);
+                        uniqueCustomerIds.add(orderData.customerId);
                         result.ordersLoaded++;
 
                     } catch (Exception e) {
@@ -145,7 +149,30 @@ public class DataLoadService {
             }
         }
 
-        // Batch insert orders
+        // PHASE 2: Batch create customers
+        if (!parsedOrders.isEmpty()) {
+            System.out.println("\n========================================");
+            System.out.println("BATCH CREATING CUSTOMERS");
+            System.out.println("Unique customer IDs found: " + uniqueCustomerIds.size());
+            System.out.println("========================================");
+
+            batchCreateCustomers(uniqueCustomerIds);
+            result.customersCreated = customersCreated;
+        }
+
+        // PHASE 3: Create Order entities with customer references
+        List<Order> ordersToCreate = new ArrayList<>();
+        for (ParsedOrderData orderData : parsedOrders) {
+            try {
+                Order order = buildOrderEntity(orderData);
+                ordersToCreate.add(order);
+            } catch (Exception e) {
+                result.parseErrors++;
+                System.err.println("Error building order entity: " + e.getMessage());
+            }
+        }
+
+        // PHASE 4: Batch insert orders
         if (!ordersToCreate.isEmpty()) {
             System.out.println("\n========================================");
             System.out.println("BATCH INSERTING " + ordersToCreate.size() + " ORDERS TO DATABASE");
@@ -154,7 +181,6 @@ public class DataLoadService {
             try {
                 List<Order> createdOrders = orderService.bulkCreateOrders(ordersToCreate);
                 result.ordersCreated = createdOrders.size();
-                result.customersCreated = customersCreated;
                 result.success = true;
             } catch (Exception e) {
                 result.success = false;
@@ -183,11 +209,11 @@ public class DataLoadService {
     }
 
     /**
-     * Parse a single order line from file
+     * Parse a single order line from file to intermediate data structure
      * Format: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
      * Example: 000000001-20250102-01-38-EBCI-006-0007729
      */
-    private Order parseOrderLine(String line, String originAirportCode) {
+    private ParsedOrderData parseOrderLineToData(String line, String originAirportCode) {
         String[] parts = line.split("-");
         if (parts.length != 7) {
             throw new IllegalArgumentException("Invalid order format: " + line);
@@ -208,9 +234,24 @@ public class DataLoadService {
         int day = Integer.parseInt(dateStr.substring(6, 8));
         LocalDateTime orderDate = LocalDateTime.of(year, month, day, hour, minute, 0);
 
-        // Get or create entities
-        Airport originAirport = getAirportByCode(originAirportCode);
-        Airport destinationAirport = getAirportByCode(destinationAirportCode);
+        // Return intermediate data structure (no DB calls yet)
+        return new ParsedOrderData(
+            orderId,
+            originAirportCode,
+            destinationAirportCode,
+            orderDate,
+            productQuantity,
+            customerId
+        );
+    }
+
+    /**
+     * Build Order entity from parsed data (after customers are created)
+     */
+    private Order buildOrderEntity(ParsedOrderData data) {
+        // Get entities from cache
+        Airport originAirport = getAirportByCode(data.originAirportCode);
+        Airport destinationAirport = getAirportByCode(data.destinationAirportCode);
         City originCity = originAirport.getCity();
         City destinationCity = destinationAirport.getCity();
 
@@ -218,20 +259,85 @@ public class DataLoadService {
         // Business rules: 2 days max (same continent), 3 days max (different continent)
         boolean sameContinent = originCity.getContinent() == destinationCity.getContinent();
         int deliveryDays = sameContinent ? 2 : 3;
-        LocalDateTime deliveryDeadline = orderDate.plusDays(deliveryDays);
-        Customer customer = getOrCreateCustomer(customerId);
+        LocalDateTime deliveryDeadline = data.orderDate.plusDays(deliveryDays);
+
+        // Get customer from cache (already created in batch)
+        Customer customer = customerCache.get(data.customerId);
+        if (customer == null) {
+            throw new IllegalStateException("Customer not found in cache: " + data.customerId);
+        }
 
         // Build Order entity
         return Order.builder()
-            .name("Order-" + orderId + "-" + destinationAirportCode)
+            .name("Order-" + data.orderId + "-" + data.destinationAirportCode)
             .origin(originCity)
             .destination(destinationCity)
             .deliveryDate(deliveryDeadline)
             .status(PackageStatus.PENDING)
             .pickupTimeHours(2.0)  // 2 hour pickup window
-            .creationDate(orderDate)
+            .creationDate(data.orderDate)
             .customer(customer)
             .build();
+    }
+
+    /**
+     * Batch create customers for all unique customer IDs
+     */
+    private void batchCreateCustomers(Set<String> customerIds) {
+        // Filter out customers that already exist in cache
+        Set<String> newCustomerIds = new HashSet<>();
+        for (String customerId : customerIds) {
+            if (!customerCache.containsKey(customerId)) {
+                newCustomerIds.add(customerId);
+            }
+        }
+
+        if (newCustomerIds.isEmpty()) {
+            System.out.println("All customers already exist in database");
+            return;
+        }
+
+        System.out.println("Creating " + newCustomerIds.size() + " new customers");
+
+        // Batch create Users
+        List<User> usersToCreate = new ArrayList<>();
+        for (String customerId : newCustomerIds) {
+            User user = User.builder()
+                .name("Customer")
+                .lastName(customerId)
+                .userType(TypeUser.CUSTOMER)
+                .build();
+            usersToCreate.add(user);
+        }
+
+        List<User> savedUsers = userService.bulkCreateUsers(usersToCreate);
+        System.out.println("Created " + savedUsers.size() + " users");
+
+        // Batch create Customers (linked to created Users)
+        List<Customer> customersToCreate = new ArrayList<>();
+        int index = 0;
+        for (String customerId : newCustomerIds) {
+            Customer customer = Customer.builder()
+                .phone(customerId)
+                .fiscalAddress("Address-" + customerId)
+                .createdAt(LocalDateTime.now())
+                .person(savedUsers.get(index))
+                .build();
+            customersToCreate.add(customer);
+            index++;
+        }
+
+        List<Customer> savedCustomers = customerService.bulkCreateCustomers(customersToCreate);
+        System.out.println("Created " + savedCustomers.size() + " customers");
+
+        // Add to cache
+        index = 0;
+        for (String customerId : newCustomerIds) {
+            customerCache.put(customerId, savedCustomers.get(index));
+            index++;
+        }
+
+        customersCreated = savedCustomers.size();
     }
 
     /**
@@ -290,48 +396,24 @@ public class DataLoadService {
     }
 
     /**
-     * Get or create customer by ID
-     * Creates new customers automatically with associated user accounts
+     * Helper class to hold parsed order data before creating entities
      */
-    private Customer getOrCreateCustomer(String customerId) {
-        // Check cache first
-        if (customerCache.containsKey(customerId)) {
-            return customerCache.get(customerId);
-        }
+    private static class ParsedOrderData {
+        final String orderId;
+        final String originAirportCode;
+        final String destinationAirportCode;
+        final LocalDateTime orderDate;
+        final int productQuantity;
+        final String customerId;
 
-        // Customer doesn't exist, create new one
-        System.out.println("Creating new customer with ID: " + customerId);
-
-        try {
-            // Create User (person) for the customer
-            User user = User.builder()
-                .name("Customer")
-                .lastName(customerId)  // Use customer ID as last name for now
-                .userType(TypeUser.CUSTOMER)
-                .build();
-
-            User savedUser = userService.createUser(user);
-
-            // Create Customer
-            Customer customer = Customer.builder()
-                .phone(customerId)  // Use customer ID as phone for tracking
-                .fiscalAddress("Address-" + customerId)  // Placeholder address
-                .createdAt(LocalDateTime.now())
-                .person(savedUser)
-                .build();
-
-            Customer savedCustomer = customerService.createCustomer(customer);
-
-            // Cache the customer
-            customerCache.put(customerId, savedCustomer);
-            customersCreated++;
-
-            System.out.println("Customer created successfully: " + customerId);
-            return savedCustomer;
-
-        } catch (Exception e) {
-            System.err.println("Failed to create customer " + customerId + ": " + e.getMessage());
-            throw new IllegalStateException("Failed to create customer with ID: " + customerId, e);
+        ParsedOrderData(String orderId, String originAirportCode, String destinationAirportCode,
+                       LocalDateTime orderDate, int productQuantity, String customerId) {
+            this.orderId = orderId;
+            this.originAirportCode = originAirportCode;
+            this.destinationAirportCode = destinationAirportCode;
+            this.orderDate = orderDate;
+            this.productQuantity = productQuantity;
+            this.customerId = customerId;
         }
     }
 
