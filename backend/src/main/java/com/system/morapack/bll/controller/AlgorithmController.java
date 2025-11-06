@@ -494,8 +494,8 @@ public class AlgorithmController {
     System.out.println("\n=== CONVERTING ALNS SOLUTION TO RESULT (with simulation time) ===");
     System.out.println("Products in solution: " + (productSolution != null ? productSolution.size() : "NULL"));
     System.out.println("Simulation window: " + simulationStartTime + " to " + simulationEndTime);
+    System.out.println("NOTE: productRoutes NOT included (frontend queries DB directly)");
 
-    List<ProductRouteDTO> productRoutes = new ArrayList<>();
     int assignedProductsCount = 0;
     int unassignedProductsCount = 0;
     Set<Integer> assignedOrders = new HashSet<>();
@@ -517,11 +517,12 @@ public class AlgorithmController {
           .assignedProducts(0)
           .unassignedProducts(0)
           .score(0.0)
-          .productRoutes(new ArrayList<>())
+          .productRoutes(null)  // NULL - frontend uses query endpoints
           .build();
     }
 
-    // Convert each product's route to ProductRouteDTO
+    // NEW: Count products and orders WITHOUT building productRoutes
+    // Frontend will query database directly via /api/query endpoints
     for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
       ProductSchema product = entry.getKey();
       ArrayList<FlightSchema> flights = entry.getValue();
@@ -533,41 +534,16 @@ public class AlgorithmController {
         if (product.getOrderId() != null) {
           assignedOrders.add(product.getOrderId());
         }
-
-        // Get origin and destination
-        FlightSchema firstFlight = flights.get(0);
-        FlightSchema lastFlight = flights.get(flights.size() - 1);
-
-        String originCity = firstFlight.getOriginAirportSchema() != null &&
-                           firstFlight.getOriginAirportSchema().getCitySchema() != null ?
-                           firstFlight.getOriginAirportSchema().getCitySchema().getName() : "Unknown";
-
-        String destinationCity = lastFlight.getDestinationAirportSchema() != null &&
-                                lastFlight.getDestinationAirportSchema().getCitySchema() != null ?
-                                lastFlight.getDestinationAirportSchema().getCitySchema().getName() : "Unknown";
-
-        // Convert flights to DTOs
-        List<FlightDTO> flightDTOs = convertFlightsToDTO(flights);
-
-        // Create ProductRouteDTO
-        ProductRouteDTO routeDTO = ProductRouteDTO.builder()
-            .productId(product.getId())
-            .orderId(product.getOrderId())
-            .originCity(originCity)
-            .destinationCity(destinationCity)
-            .flights(flightDTOs)
-            .build();
-
-        productRoutes.add(routeDTO);
       }
     }
 
     System.out.println("Assigned products: " + assignedProductsCount);
     System.out.println("Assigned orders: " + assignedOrders.size());
+    System.out.println("productRoutes: NULL (use query endpoints instead)");
 
     return AlgorithmResultSchema.builder()
         .success(true)
-        .message("ALNS algorithm executed successfully")
+        .message("ALNS algorithm executed successfully. Use /api/query endpoints to retrieve results.")
         .executionStartTime(executionStartTime)
         .executionEndTime(executionEndTime)
         .executionTimeSeconds(executionTime)
@@ -580,7 +556,7 @@ public class AlgorithmController {
         .assignedProducts(assignedProductsCount)
         .unassignedProducts(unassignedProductsCount)
         .score(0.0)  // TODO: Calculate solution score
-        .productRoutes(productRoutes)
+        .productRoutes(null)  // NULL - frontend queries DB via /api/query endpoints
         .build();
   }
 
