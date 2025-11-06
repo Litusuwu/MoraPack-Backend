@@ -1,6 +1,9 @@
 package com.system.morapack.bll.service;
 
+import com.system.morapack.dao.morapack_psql.model.Flight;
 import com.system.morapack.dao.morapack_psql.model.Product;
+import com.system.morapack.dao.morapack_psql.model.ProductFlight;
+import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.schemas.FlightSchema;
@@ -22,7 +25,8 @@ import java.util.Map;
  *
  * This service handles:
  * - Creating Product records from order splits
- * - Assigning flights to orders/products
+ * - Assigning flights to orders/products (via ProductFlight junction table)
+ * - Supporting multi-hop flight routes with sequence ordering
  * - Updating order and product statuses
  * - Batch operations to minimize DB calls
  */
@@ -32,6 +36,7 @@ public class AlgorithmPersistenceService {
 
     private final ProductService productService;
     private final OrderService orderService;
+    private final FlightService flightService;
 
     /**
      * Represents a split portion of an order
@@ -98,7 +103,7 @@ public class AlgorithmPersistenceService {
                 // Set order reference (use the fetched entity)
                 product.setOrder(orderEntity);
 
-                // Build flight path string
+                // Build flight path string (legacy field, kept for backward compatibility)
                 StringBuilder flightPath = new StringBuilder();
                 for (FlightSchema flight : split.getAssignedFlights()) {
                     if (flightPath.length() > 0) {
@@ -110,7 +115,31 @@ public class AlgorithmPersistenceService {
                 }
                 product.setAssignedFlight(flightPath.toString());
 
-                // Save product
+                // Create ProductFlight records for multi-hop support
+                List<ProductFlight> productFlights = new ArrayList<>();
+                int sequenceOrder = 1;
+                for (FlightSchema flightSchema : split.getAssignedFlights()) {
+                    // Fetch the Flight entity from database
+                    Flight flight = flightService.get(flightSchema.getId());
+
+                    // Create ProductFlight junction record
+                    ProductFlight productFlight = ProductFlight.builder()
+                        .product(product)
+                        .flight(flight)
+                        .sequenceOrder(sequenceOrder++)
+                        .build();
+
+                    productFlights.add(productFlight);
+
+                    System.out.println("  - Flight " + sequenceOrder + ": " +
+                        flight.getOriginAirport().getCodeIATA() + "-" +
+                        flight.getDestinationAirport().getCodeIATA());
+                }
+
+                // Set the product flights (will be cascaded on save)
+                product.setProductFlights(productFlights);
+
+                // Save product (will cascade save ProductFlight records)
                 productService.createProduct(product);
                 productsCreated++;
             }

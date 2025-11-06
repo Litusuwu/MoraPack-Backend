@@ -1,6 +1,8 @@
 package com.system.morapack.dao.morapack_psql.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
 import com.system.morapack.schemas.PackageStatus;
@@ -44,4 +46,14 @@ public class Product {
 
   @Column(name = "assigned_flight", length = 1000)
   private String assignedFlight;
+
+  /**
+   * List of flights assigned to this product in sequence order
+   * For direct flights: 1 entry
+   * For multi-hop routes: multiple entries in order (e.g., LIM-AQP, AQP-CUZ)
+   */
+  @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OrderBy("sequenceOrder ASC")
+  @Builder.Default
+  private List<ProductFlight> productFlights = new ArrayList<>();
 }
