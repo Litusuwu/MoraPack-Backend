@@ -81,6 +81,9 @@ public class AlgorithmPersistenceService {
 
             System.out.println("Order " + orderId + ": Creating " + splits.size() + " product(s)");
 
+            // Fetch the order entity once for all splits (performance optimization)
+            com.system.morapack.dao.morapack_psql.model.Order orderEntity = orderService.getOrder(orderId);
+
             for (OrderSplit split : splits) {
                 // Create Product record for this split
                 Product product = new Product();
@@ -92,10 +95,7 @@ public class AlgorithmPersistenceService {
                 product.setWeight(1.0);  // 1 kg per unit
                 product.setVolume(1.0);  // 1 m³ per unit
 
-                // Set order reference
-                com.system.morapack.dao.morapack_psql.model.Order orderEntity =
-                    new com.system.morapack.dao.morapack_psql.model.Order();
-                orderEntity.setId(orderId);
+                // Set order reference (use the fetched entity)
                 product.setOrder(orderEntity);
 
                 // Build flight path string
@@ -133,16 +133,7 @@ public class AlgorithmPersistenceService {
      */
     @Transactional
     public void updateOrderStatus(Integer orderId, PackageStatus status) {
-        com.system.morapack.dao.morapack_psql.model.Order order =
-            orderService.fetchOrders(null).stream()
-                .filter(o -> o.getId().equals(orderId))
-                .findFirst()
-                .orElse(null);
-
-        if (order != null) {
-            order.setStatus(status);
-            orderService.save(order);
-        }
+        orderService.updateStatus(orderId, status);
     }
 
     /**
