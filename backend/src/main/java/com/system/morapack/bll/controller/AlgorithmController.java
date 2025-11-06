@@ -225,41 +225,151 @@ public class AlgorithmController {
   }
 
   /**
-   * Execute algorithm based on request parameters
+   * Execute DAILY SCENARIO: Incremental time window processing
+   * Loads only orders within a small time window (e.g., 30 minutes)
    */
+  public AlgorithmResultSchema executeDailyScenario(AlgorithmRequest request) {
+    LocalDateTime executionStartTime = LocalDateTime.now();
+
+    try {
+      System.out.println("===========================================");
+      System.out.println("EXECUTING DAILY SCENARIO");
+      System.out.println("===========================================");
+
+      // Calculate simulation window
+      LocalDateTime simStart = request.getSimulationStartTime();
+      LocalDateTime simEnd = calculateSimulationEndTime(request);
+
+      System.out.println("Simulation window: " + simStart + " to " + simEnd);
+
+      // Execute ALNS with time window
+      Solution alnsSolution = new Solution(simStart, simEnd);
+      alnsSolution.solve();
+
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
+
+      // Get the product-level solution
+      Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
+
+      // Convert to result with simulation time info
+      return convertALNSSolutionToResult(productSolution, executionStartTime, executionEndTime,
+                                         executionTime, simStart, simEnd);
+
+    } catch (Exception e) {
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      e.printStackTrace();
+      return AlgorithmResultSchema.builder()
+          .success(false)
+          .message("Daily scenario execution failed: " + e.getMessage())
+          .executionStartTime(executionStartTime)
+          .executionEndTime(executionEndTime)
+          .executionTimeSeconds(ChronoUnit.SECONDS.between(executionStartTime, executionEndTime))
+          .build();
+    }
+  }
+
+  /**
+   * Execute WEEKLY SCENARIO: 7-day batch processing
+   * Loads all orders from 7 days and returns complete solution
+   */
+  public AlgorithmResultSchema executeWeeklyScenario(AlgorithmRequest request) {
+    LocalDateTime executionStartTime = LocalDateTime.now();
+
+    try {
+      System.out.println("===========================================");
+      System.out.println("EXECUTING WEEKLY SCENARIO (7 DAYS)");
+      System.out.println("===========================================");
+
+      // Calculate simulation window (always 7 days for weekly)
+      LocalDateTime simStart = request.getSimulationStartTime();
+      LocalDateTime simEnd = simStart.plusDays(7);
+
+      System.out.println("Simulation window: " + simStart + " to " + simEnd);
+      System.out.println("Expected execution time: 30-90 minutes");
+
+      // Execute ALNS with time window
+      Solution alnsSolution = new Solution(simStart, simEnd);
+      alnsSolution.solve();
+
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
+
+      System.out.println("Actual execution time: " + executionTime + " seconds (" +
+                        (executionTime / 60) + " minutes)");
+
+      // Get the product-level solution
+      Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
+
+      // Convert to result with simulation time info
+      return convertALNSSolutionToResult(productSolution, executionStartTime, executionEndTime,
+                                         executionTime, simStart, simEnd);
+
+    } catch (Exception e) {
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      e.printStackTrace();
+      return AlgorithmResultSchema.builder()
+          .success(false)
+          .message("Weekly scenario execution failed: " + e.getMessage())
+          .executionStartTime(executionStartTime)
+          .executionEndTime(executionEndTime)
+          .executionTimeSeconds(ChronoUnit.SECONDS.between(executionStartTime, executionEndTime))
+          .build();
+    }
+  }
+
+  /**
+   * Calculate simulation end time based on request parameters
+   */
+  private LocalDateTime calculateSimulationEndTime(AlgorithmRequest request) {
+    LocalDateTime startTime = request.getSimulationStartTime();
+
+    // If endTime is explicitly provided, use it
+    if (request.getSimulationEndTime() != null) {
+      return request.getSimulationEndTime();
+    }
+
+    // Otherwise calculate from duration
+    if (request.getSimulationDurationDays() != null && request.getSimulationDurationDays() > 0) {
+      return startTime.plusDays(request.getSimulationDurationDays());
+    }
+
+    if (request.getSimulationDurationHours() != null && request.getSimulationDurationHours() > 0) {
+      long minutes = (long) (request.getSimulationDurationHours() * 60);
+      return startTime.plusMinutes(minutes);
+    }
+
+    // Default: 1 hour window
+    return startTime.plusHours(1);
+  }
+
+  /**
+   * Execute algorithm based on request parameters (LEGACY METHOD)
+   * @deprecated Use executeDailyScenario or executeWeeklyScenario instead
+   */
+  @Deprecated
   public AlgorithmResultSchema executeAlgorithm(AlgorithmRequest request) {
     LocalDateTime startTime = LocalDateTime.now();
 
     try {
       // Set data source mode if specified
       if (request.getUseDatabase() != null) {
-        // This would require modifying Constants or passing to algorithm constructors
         System.out.println("Using data source: " + (request.getUseDatabase() ? "DATABASE" : "FILE"));
       }
 
-      String algorithmType = request.getAlgorithmType() != null ?
-          request.getAlgorithmType().toUpperCase() : "TABU";
+      System.out.println("WARNING: Using legacy executeAlgorithm method");
+      System.out.println("Consider using executeDailyScenario or executeWeeklyScenario instead");
 
-      AlgorithmResultSchema result;
-
-      switch (algorithmType) {
-        case "ALNS":
-          result = executeALNS(request, startTime);
-          break;
-        case "TABU":
-        default:
-          result = executeTabuSearch(request, startTime);
-          break;
-      }
-
+      // Default to ALNS
+      AlgorithmResultSchema result = executeALNS(request, startTime);
       return result;
 
     } catch (Exception e) {
       LocalDateTime endTime = LocalDateTime.now();
+      e.printStackTrace();
       return AlgorithmResultSchema.builder()
           .success(false)
           .message("Algorithm execution failed: " + e.getMessage())
-          .algorithmType(request.getAlgorithmType())
           .executionStartTime(startTime)
           .executionEndTime(endTime)
           .executionTimeSeconds(ChronoUnit.SECONDS.between(startTime, endTime))
@@ -296,15 +406,122 @@ public class AlgorithmController {
   }
 
   /**
-   * Convert ALNS product-level solution to AlgorithmResultSchema
+   * Convert ALNS product-level solution to AlgorithmResultSchema (with simulation time)
+   * This is the preferred method for daily/weekly scenarios
    */
+  private AlgorithmResultSchema convertALNSSolutionToResult(
+      Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
+      LocalDateTime executionStartTime,
+      LocalDateTime executionEndTime,
+      long executionTime,
+      LocalDateTime simulationStartTime,
+      LocalDateTime simulationEndTime) {
+
+    System.out.println("\n=== CONVERTING ALNS SOLUTION TO RESULT (with simulation time) ===");
+    System.out.println("Products in solution: " + (productSolution != null ? productSolution.size() : "NULL"));
+    System.out.println("Simulation window: " + simulationStartTime + " to " + simulationEndTime);
+
+    List<ProductRouteDTO> productRoutes = new ArrayList<>();
+    int assignedProductsCount = 0;
+    int unassignedProductsCount = 0;
+    Set<Integer> assignedOrders = new HashSet<>();
+
+    if (productSolution == null || productSolution.isEmpty()) {
+      System.out.println("WARNING: productSolution is empty or null");
+      return AlgorithmResultSchema.builder()
+          .success(true)
+          .message("ALNS algorithm executed but no products were assigned")
+          .executionStartTime(executionStartTime)
+          .executionEndTime(executionEndTime)
+          .executionTimeSeconds(executionTime)
+          .simulationStartTime(simulationStartTime)
+          .simulationEndTime(simulationEndTime)
+          .totalOrders(0)
+          .assignedOrders(0)
+          .unassignedOrders(0)
+          .totalProducts(0)
+          .assignedProducts(0)
+          .unassignedProducts(0)
+          .score(0.0)
+          .productRoutes(new ArrayList<>())
+          .build();
+    }
+
+    // Convert each product's route to ProductRouteDTO
+    for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
+      ProductSchema product = entry.getKey();
+      ArrayList<FlightSchema> flights = entry.getValue();
+
+      if (product != null && flights != null && !flights.isEmpty()) {
+        assignedProductsCount++;
+
+        // Track order
+        if (product.getOrderId() != null) {
+          assignedOrders.add(product.getOrderId());
+        }
+
+        // Get origin and destination
+        FlightSchema firstFlight = flights.get(0);
+        FlightSchema lastFlight = flights.get(flights.size() - 1);
+
+        String originCity = firstFlight.getOriginAirportSchema() != null &&
+                           firstFlight.getOriginAirportSchema().getCitySchema() != null ?
+                           firstFlight.getOriginAirportSchema().getCitySchema().getName() : "Unknown";
+
+        String destinationCity = lastFlight.getDestinationAirportSchema() != null &&
+                                lastFlight.getDestinationAirportSchema().getCitySchema() != null ?
+                                lastFlight.getDestinationAirportSchema().getCitySchema().getName() : "Unknown";
+
+        // Convert flights to DTOs
+        List<FlightDTO> flightDTOs = convertFlightsToDTO(flights);
+
+        // Create ProductRouteDTO
+        ProductRouteDTO routeDTO = ProductRouteDTO.builder()
+            .productId(product.getId())
+            .orderId(product.getOrderId())
+            .originCity(originCity)
+            .destinationCity(destinationCity)
+            .flights(flightDTOs)
+            .build();
+
+        productRoutes.add(routeDTO);
+      }
+    }
+
+    System.out.println("Assigned products: " + assignedProductsCount);
+    System.out.println("Assigned orders: " + assignedOrders.size());
+
+    return AlgorithmResultSchema.builder()
+        .success(true)
+        .message("ALNS algorithm executed successfully")
+        .executionStartTime(executionStartTime)
+        .executionEndTime(executionEndTime)
+        .executionTimeSeconds(executionTime)
+        .simulationStartTime(simulationStartTime)
+        .simulationEndTime(simulationEndTime)
+        .totalOrders(assignedOrders.size())
+        .assignedOrders(assignedOrders.size())
+        .unassignedOrders(0)  // TODO: Calculate properly
+        .totalProducts(assignedProductsCount)
+        .assignedProducts(assignedProductsCount)
+        .unassignedProducts(unassignedProductsCount)
+        .score(0.0)  // TODO: Calculate solution score
+        .productRoutes(productRoutes)
+        .build();
+  }
+
+  /**
+   * Convert ALNS product-level solution to AlgorithmResultSchema (LEGACY - no simulation time)
+   * @deprecated Use version with simulation time parameters
+   */
+  @Deprecated
   private AlgorithmResultSchema convertALNSSolutionToResult(
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
       LocalDateTime startTime,
       LocalDateTime endTime,
       long executionTime) {
 
-    System.out.println("\n=== CONVIRTIENDO SOLUCIÓN ALNS A RESULTADO ===");
+    System.out.println("\n=== CONVIRTIENDO SOLUCIÓN ALNS A RESULTADO (LEGACY) ===");
     System.out.println("Productos en solución: " + (productSolution != null ? productSolution.size() : "NULL"));
 
     List<ProductRouteDTO> productRoutes = new ArrayList<>();
@@ -317,7 +534,6 @@ public class AlgorithmController {
       return AlgorithmResultSchema.builder()
           .success(true)
           .message("ALNS algorithm executed but no products were assigned")
-          .algorithmType("ALNS")
           .executionStartTime(startTime)
           .executionEndTime(endTime)
           .executionTimeSeconds(executionTime)
@@ -325,6 +541,8 @@ public class AlgorithmController {
           .assignedOrders(0)
           .unassignedOrders(0)
           .totalProducts(0)
+          .assignedProducts(0)
+          .unassignedProducts(0)
           .score(0.0)
           .productRoutes(new ArrayList<>())
           .build();
