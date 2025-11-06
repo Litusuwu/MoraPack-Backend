@@ -101,8 +101,10 @@ public class DatabaseInputDataSource implements InputDataSource {
     }
 
     @Override
+    @Deprecated
     public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports) {
-        System.out.println("[DATABASE] Loading orders/products from PostgreSQL via OrderService...");
+        System.out.println("[DATABASE] Loading ALL orders (no time filtering) - DEPRECATED");
+        System.out.println("[DATABASE] Consider using loadOrders(airports, startTime, endTime) instead");
 
         List<Order> orders = orderService.fetchOrders(null); // null = fetch all
         ArrayList<OrderSchema> orderSchemas = new ArrayList<>();
@@ -115,6 +117,42 @@ public class DatabaseInputDataSource implements InputDataSource {
         }
 
         System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
+        return orderSchemas;
+    }
+
+    @Override
+    public ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
+                                            LocalDateTime simulationStartTime,
+                                            LocalDateTime simulationEndTime) {
+        System.out.println("[DATABASE] Loading orders with time window filtering from PostgreSQL");
+        System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
+
+        // Fetch all orders and filter by creation date
+        // TODO: Optimize by adding query method to OrderService that filters by date range
+        List<Order> allOrders = orderService.fetchOrders(null);
+        ArrayList<OrderSchema> orderSchemas = new ArrayList<>();
+
+        int filteredCount = 0;
+
+        for (Order order : allOrders) {
+            // Filter by creation date (order date)
+            LocalDateTime orderDate = order.getCreationDate() != null ?
+                    order.getCreationDate() : LocalDateTime.now();
+
+            // Skip orders outside simulation time window
+            if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
+                filteredCount++;
+                continue;
+            }
+
+            OrderSchema orderSchema = convertToOrderSchema(order, airports);
+            if (orderSchema != null) {
+                orderSchemas.add(orderSchema);
+            }
+        }
+
+        System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
+        System.out.println("[DATABASE] Filtered out " + filteredCount + " orders outside time window");
         return orderSchemas;
     }
 

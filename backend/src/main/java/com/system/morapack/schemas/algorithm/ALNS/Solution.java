@@ -79,8 +79,51 @@ public class Solution {
     // NEW: Snapshot para rollback de cambios especulativos (Recomendación #2)
     private HashMap<AirportSchema, int[]> temporalWarehouseSnapshot;
 
-    
+    // Simulation time window parameters
+    private LocalDateTime simulationStartTime;
+    private LocalDateTime simulationEndTime;
+
+    /**
+     * Constructor with simulation time window (PREFERRED for daily/weekly scenarios)
+     * Loads only orders within the specified time window
+     *
+     * @param simulationStartTime Start of simulation time window
+     * @param simulationEndTime End of simulation time window
+     */
+    public Solution(LocalDateTime simulationStartTime, LocalDateTime simulationEndTime) {
+        this.simulationStartTime = simulationStartTime;
+        this.simulationEndTime = simulationEndTime;
+
+        System.out.println("========================================");
+        System.out.println("ALNS SOLUTION - TIME WINDOW MODE");
+        System.out.println("Simulation Start: " + simulationStartTime);
+        System.out.println("Simulation End:   " + simulationEndTime);
+        System.out.println("========================================");
+
+        initializeSolution(simulationStartTime, simulationEndTime);
+    }
+
+    /**
+     * Default constructor (loads ALL orders - no time filtering)
+     * @deprecated Use Solution(simulationStartTime, simulationEndTime) for scenarios
+     */
+    @Deprecated
     public Solution() {
+        System.out.println("========================================");
+        System.out.println("ALNS SOLUTION - LEGACY MODE (NO TIME FILTERING)");
+        System.out.println("WARNING: Loading ALL orders from data source");
+        System.out.println("========================================");
+
+        this.simulationStartTime = null;
+        this.simulationEndTime = null;
+
+        initializeSolution(null, null);
+    }
+
+    /**
+     * Common initialization logic for both constructors
+     */
+    private void initializeSolution(LocalDateTime simStart, LocalDateTime simEnd) {
         // ========== MODULAR DATA SOURCE ==========
         // Create data source based on Constants.DATA_SOURCE_MODE
         // Supports FILE (data/ directory) and DATABASE (PostgreSQL) modes
@@ -96,7 +139,15 @@ public class Solution {
         // Load data from selected source (FILE or DATABASE)
         this.airportSchemas = dataSource.loadAirports();
         this.flightSchemas = dataSource.loadFlights(this.airportSchemas);
-        this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
+
+        // Load orders with or without time filtering
+        if (simStart != null && simEnd != null) {
+            System.out.println("Loading orders with time window filtering...");
+            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas, simStart, simEnd);
+        } else {
+            System.out.println("Loading ALL orders (no time filtering)...");
+            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
+        }
 
         // Keep references to old file-based readers for backward compatibility
         // (these will be null when using DATABASE mode, but not accessed)
@@ -289,7 +340,21 @@ public class Solution {
     public Map<ProductSchema, ArrayList<FlightSchema>> getProductLevelSolution() {
         return productTracker.getProductLevelSolution();
     }
-    
+
+    /**
+     * Get simulation start time (for API response)
+     */
+    public LocalDateTime getSimulationStartTime() {
+        return simulationStartTime;
+    }
+
+    /**
+     * Get simulation end time (for API response)
+     */
+    public LocalDateTime getSimulationEndTime() {
+        return simulationEndTime;
+    }
+
     /**
      * Inicializa el pool de paquetes no asignados para expansión ALNS
      */
