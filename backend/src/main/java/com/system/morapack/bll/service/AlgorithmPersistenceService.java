@@ -1,6 +1,8 @@
 package com.system.morapack.bll.service;
 
+import com.system.morapack.dao.morapack_psql.model.Flight;
 import com.system.morapack.dao.morapack_psql.model.Product;
+import com.system.morapack.dao.morapack_psql.repository.FlightRepository;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.schemas.FlightSchema;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service for persisting algorithm results to the database
@@ -32,6 +35,7 @@ public class AlgorithmPersistenceService {
 
     private final ProductService productService;
     private final OrderService orderService;
+    private final FlightRepository flightRepository;
 
     /**
      * Represents a split portion of an order
@@ -74,12 +78,26 @@ public class AlgorithmPersistenceService {
         int productsCreated = 0;
         Map<Integer, List<OrderSplit>> splitsByOrder = groupSplitsByOrder(orderSplits);
 
-        // For each order, create products for its splits
+        // For each order, create products for its splits and assign flight
         for (Map.Entry<Integer, List<OrderSplit>> entry : splitsByOrder.entrySet()) {
             Integer orderId = entry.getKey();
             List<OrderSplit> splits = entry.getValue();
 
             System.out.println("Order " + orderId + ": Creating " + splits.size() + " product(s)");
+
+            // Get the flight assignment (use first split's first flight)
+            Flight assignedFlight = null;
+            if (!splits.isEmpty() && splits.get(0).getAssignedFlights() != null && !splits.get(0).getAssignedFlights().isEmpty()) {
+                String flightCode = splits.get(0).getAssignedFlights().get(0).getCode();
+                Optional<Flight> flightOpt = flightRepository.findByCode(flightCode);
+
+                if (flightOpt.isPresent()) {
+                    assignedFlight = flightOpt.get();
+                    System.out.println("  -> Assigned to flight: " + flightCode);
+                } else {
+                    System.err.println("  -> Warning: Flight not found with code: " + flightCode);
+                }
+            }
 
             for (OrderSplit split : splits) {
                 // Create Product record for this split
@@ -97,17 +115,13 @@ public class AlgorithmPersistenceService {
                 orderEntity.setId(orderId);
                 product.setOrder(orderEntity);
 
-                // NOTE: Product model doesn't have status or assignedFlight fields
-                // Flight assignment information is tracked in algorithm solution only
-                // If needed, add these fields to Product model or create separate FlightAssignment table
-
                 // Save product
                 productService.createProduct(product);
                 productsCreated++;
             }
 
-            // Update order status to IN_TRANSIT
-            updateOrderStatus(orderId, PackageStatus.IN_TRANSIT);
+            // Update order status and assign flight
+            updateOrderStatusAndFlight(orderId, PackageStatus.IN_TRANSIT, assignedFlight);
         }
 
         System.out.println("========================================");
@@ -120,12 +134,25 @@ public class AlgorithmPersistenceService {
     }
 
     /**
-     * Update order status in database
+     * Update order status and assign flight in database
      */
     @Transactional
-    public void updateOrderStatus(Integer orderId, PackageStatus status) {
+    public void updateOrderStatusAndFlight(Integer orderId, PackageStatus status, Flight assignedFlight) {
         try {
-            orderService.updateStatus(orderId, status);
+            // Get the order entity
+            com.system.morapack.dao.morapack_psql.model.Order order = orderService.get(orderId);
+
+            // Update status
+            order.setStatus(status);
+
+            // Assign flight if provided
+            if (assignedFlight != null) {
+                order.setAssignedFlight(assignedFlight);
+            }
+
+            // Save the updated order
+            orderService.update(orderId, order);
+
         } catch (Exception e) {
             System.err.println("Warning: Failed to update order " + orderId + ": " + e.getMessage());
         }

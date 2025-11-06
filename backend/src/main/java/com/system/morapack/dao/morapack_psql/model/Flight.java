@@ -3,6 +3,8 @@ package com.system.morapack.dao.morapack_psql.model;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter @Setter @Builder
 @AllArgsConstructor @NoArgsConstructor
@@ -47,4 +49,8 @@ public class Flight {
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "destination_airport_id", nullable = false)
   private Airport destinationAirport;
+
+  @OneToMany(mappedBy = "assignedFlight", cascade = CascadeType.ALL, orphanRemoval = false)
+  @Builder.Default
+  private List<Order> orders = new ArrayList<>();
 }

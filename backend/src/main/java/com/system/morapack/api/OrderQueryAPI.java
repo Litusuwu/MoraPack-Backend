@@ -168,16 +168,57 @@ public class OrderQueryAPI {
     public ResponseEntity<Map<String, Object>> getFlightStatus() {
 
         try {
+            List<Order> allOrders = orderService.fetchOrders(null);
             List<Product> allProducts = productService.fetchProducts(null);
+            List<Flight> allFlights = flightService.fetch(null);
 
-            // NOTE: Product model doesn't currently have assignedFlight field
-            // TODO: Add assignedFlight field to Product model for full functionality
+            // Count orders assigned to flights
+            long ordersAssigned = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null)
+                .count();
+
+            long ordersUnassigned = allOrders.size() - ordersAssigned;
+
+            // Count products assigned via orders
+            Set<Integer> assignedOrderIds = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null)
+                .map(Order::getId)
+                .collect(Collectors.toSet());
+
+            long productsAssigned = allProducts.stream()
+                .filter(product -> product.getOrder() != null &&
+                                  assignedOrderIds.contains(product.getOrder().getId()))
+                .count();
+
+            long productsUnassigned = allProducts.size() - productsAssigned;
+
+            // Count flights with orders
+            Set<Integer> usedFlightIds = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null)
+                .map(order -> order.getAssignedFlight().getId())
+                .collect(Collectors.toSet());
+
+            long flightsUsed = usedFlightIds.size();
+            long flightsUnused = allFlights.size() - flightsUsed;
 
             // Build response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("totalProducts", allProducts.size());
-            response.put("note", "Flight assignment tracking not yet implemented in Product model");
+            response.put("orders", Map.of(
+                "total", allOrders.size(),
+                "assigned", ordersAssigned,
+                "unassigned", ordersUnassigned
+            ));
+            response.put("products", Map.of(
+                "total", allProducts.size(),
+                "assigned", productsAssigned,
+                "unassigned", productsUnassigned
+            ));
+            response.put("flights", Map.of(
+                "total", allFlights.size(),
+                "used", flightsUsed,
+                "unused", flightsUnused
+            ));
 
             return ResponseEntity.ok(response);
 
@@ -288,15 +329,42 @@ public class OrderQueryAPI {
     public ResponseEntity<Map<String, Object>> getProductsForFlight(@PathVariable String flightCode) {
 
         try {
-            // NOTE: Product model doesn't currently have assignedFlight field
-            // TODO: Add assignedFlight field to Product model to enable flight-based filtering
+            // Find flight by code
+            List<Flight> allFlights = flightService.fetch(null);
+            Flight targetFlight = allFlights.stream()
+                .filter(f -> flightCode.equals(f.getCode()))
+                .findFirst()
+                .orElse(null);
+
+            if (targetFlight == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Flight not found: " + flightCode);
+                return ResponseEntity.notFound().build();
+            }
+
+            // Find all orders assigned to this flight
+            List<Order> allOrders = orderService.fetchOrders(null);
+            Set<Integer> flightOrderIds = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null &&
+                               targetFlight.getId().equals(order.getAssignedFlight().getId()))
+                .map(Order::getId)
+                .collect(Collectors.toSet());
+
+            // Find all products belonging to these orders
+            List<Product> allProducts = productService.fetchProducts(null);
+            List<Product> flightProducts = allProducts.stream()
+                .filter(product -> product.getOrder() != null &&
+                                  flightOrderIds.contains(product.getOrder().getId()))
+                .collect(Collectors.toList());
 
             // Build response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("flightCode", flightCode);
-            response.put("note", "Flight assignment tracking not yet implemented in Product model");
-            response.put("products", new ArrayList<>());
+            response.put("flightId", targetFlight.getId());
+            response.put("productCount", flightProducts.size());
+            response.put("products", flightProducts);
 
             return ResponseEntity.ok(response);
 
@@ -321,15 +389,34 @@ public class OrderQueryAPI {
     public ResponseEntity<Map<String, Object>> getOrdersForFlight(@PathVariable String flightCode) {
 
         try {
-            // NOTE: Product model doesn't currently have assignedFlight field
-            // TODO: Add assignedFlight field to Product model to enable flight-based filtering
+            // Find flight by code
+            List<Flight> allFlights = flightService.fetch(null);
+            Flight targetFlight = allFlights.stream()
+                .filter(f -> flightCode.equals(f.getCode()))
+                .findFirst()
+                .orElse(null);
+
+            if (targetFlight == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Flight not found: " + flightCode);
+                return ResponseEntity.notFound().build();
+            }
+
+            // Find all orders assigned to this flight
+            List<Order> allOrders = orderService.fetchOrders(null);
+            List<Order> flightOrders = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null &&
+                               targetFlight.getId().equals(order.getAssignedFlight().getId()))
+                .collect(Collectors.toList());
 
             // Build response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("flightCode", flightCode);
-            response.put("note", "Flight assignment tracking not yet implemented in Product model");
-            response.put("orders", new ArrayList<>());
+            response.put("flightId", targetFlight.getId());
+            response.put("orderCount", flightOrders.size());
+            response.put("orders", flightOrders);
 
             return ResponseEntity.ok(response);
 
@@ -367,15 +454,30 @@ public class OrderQueryAPI {
                 return ResponseEntity.notFound().build();
             }
 
-            // NOTE: Product model doesn't currently have assignedFlight field
-            // TODO: Add assignedFlight field to Product model to track capacity usage
+            // Find all orders assigned to this flight
+            List<Order> allOrders = orderService.fetchOrders(null);
+            Set<Integer> flightOrderIds = allOrders.stream()
+                .filter(order -> order.getAssignedFlight() != null &&
+                               flight.getId().equals(order.getAssignedFlight().getId()))
+                .map(Order::getId)
+                .collect(Collectors.toSet());
+
+            // Find all products belonging to these orders
+            List<Product> allProducts = productService.fetchProducts(null);
+            long productCount = allProducts.stream()
+                .filter(product -> product.getOrder() != null &&
+                                  flightOrderIds.contains(product.getOrder().getId()))
+                .count();
 
             // Build response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("flight", flight);
-            response.put("note", "Product-to-flight assignment tracking not yet implemented");
+            response.put("orderCount", flightOrderIds.size());
+            response.put("productCount", productCount);
             response.put("capacityTotal", flight.getMaxCapacity());
+            response.put("capacityUsed", productCount);
+            response.put("capacityRemaining", flight.getMaxCapacity() - productCount);
 
             return ResponseEntity.ok(response);
 

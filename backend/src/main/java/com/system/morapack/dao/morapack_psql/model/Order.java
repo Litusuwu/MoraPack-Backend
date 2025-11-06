@@ -57,4 +57,8 @@ public class Order {
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "customer_id", nullable = false)
   private Customer customer;
+
+  @ManyToOne(fetch = FetchType.LAZY, optional = true)
+  @JoinColumn(name = "assigned_flight_id", nullable = true)
+  private Flight assignedFlight;
 }
