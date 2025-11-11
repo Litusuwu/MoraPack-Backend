@@ -19,147 +19,68 @@ public class DataImportController {
 
     private final DataImportService dataImportService;
 
-    /**
-     * Upload and import airports from text file
-     * POST /api/data-import/airports
-     * 
-     * Expected file format (same as airportInfo.txt):
-     * ID CodeIATA City Country Alias Timezone Capacity Latitude: X.XXXX Longitude: Y.YYYY
-     * 
-     * @param file MultipartFile containing airport data
-     * @return ImportResult with success status, message, and count
-     */
-    @PostMapping(value = "/airports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> uploadAirports(
-            @RequestParam("file") MultipartFile file) {
-        
-        // Validate file
-        if (file.isEmpty()) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "El archivo está vacío");
-            return ResponseEntity.badRequest().body(error);
-        }
-        
-        if (!file.getOriginalFilename().endsWith(".txt")) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "El archivo debe ser formato .txt");
-            return ResponseEntity.badRequest().body(error);
-        }
-        
-        // Process import
-        Map<String, Object> result = dataImportService.importAirports(file);
-        
+    // === NUEVO ===
+    @PostMapping(value = "/airports", consumes = MediaType.ALL_VALUE)
+    public ResponseEntity<Map<String, Object>> loadAirports() {
+        Map<String, Object> result = dataImportService.importAirports();
         boolean success = (boolean) result.get("success");
-        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
-        
-        return ResponseEntity.status(status).body(result);
+        return ResponseEntity.status(success ? HttpStatus.OK : HttpStatus.BAD_REQUEST).body(result);
     }
 
-    /**
-     * Upload and import flights from text file
-     * POST /api/data-import/flights
-     * 
-     * Expected file format (same as flights.txt):
-     * ORIGIN-DESTINATION-DEPARTURE-ARRIVAL-CAPACITY
-     * Example: BOG-UIO-0830-1045-250
-     * 
-     * @param file MultipartFile containing flight data
-     * @return ImportResult with success status, message, and count
-     */
-    @PostMapping(value = "/flights", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> uploadFlights(
-            @RequestParam("file") MultipartFile file) {
-        
-        // Validate file
-        if (file.isEmpty()) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "El archivo está vacío");
-            return ResponseEntity.badRequest().body(error);
-        }
-        
-        if (!file.getOriginalFilename().endsWith(".txt")) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "El archivo debe ser formato .txt");
-            return ResponseEntity.badRequest().body(error);
-        }
-        
-        // Process import
-        Map<String, Object> result = dataImportService.importFlights(file);
-        
+    // === NUEVO ===
+    @PostMapping(value = "/flights", consumes = MediaType.ALL_VALUE)
+    public ResponseEntity<Map<String, Object>> loadFlights() {
+        Map<String, Object> result = dataImportService.importFlights();
         boolean success = (boolean) result.get("success");
-        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
-        
-        return ResponseEntity.status(status).body(result);
+        return ResponseEntity.status(success ? HttpStatus.OK : HttpStatus.BAD_REQUEST).body(result);
     }
 
-    /**
-     * Upload and import orders/products from text file
-     * POST /api/data-import/orders
-     * 
-     * Expected file format (same as products.txt):
-     * dd hh mm dest ### IdClien
-     * dd: priority days (01/04/12/24)
-     * hh: hours (01-23)
-     * mm: minutes (01-59)
-     * dest: destination airport code
-     * ###: product quantity (001-999)
-     * IdClien: customer ID (7 digits)
-     * 
-     * Example: 01 10 30 BOG 005 1234567
-     * 
-     * @param file MultipartFile containing order/product data
-     * @return ImportResult with success status, message, orders count, products count
-     */
+    // === SIN CAMBIOS ===
     @PostMapping(value = "/orders", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> uploadOrders(
             @RequestParam("file") MultipartFile file) {
-        
-        // Validate file
+
         if (file.isEmpty()) {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("message", "El archivo está vacío");
             return ResponseEntity.badRequest().body(error);
         }
-        
+
         if (!file.getOriginalFilename().endsWith(".txt")) {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("message", "El archivo debe ser formato .txt");
             return ResponseEntity.badRequest().body(error);
         }
-        
-        // Process import
+
         Map<String, Object> result = dataImportService.importOrders(file);
-        
         boolean success = (boolean) result.get("success");
         HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
-        
+
         return ResponseEntity.status(status).body(result);
     }
 
-    /**
-     * Get import status and statistics
-     * GET /api/data-import/status
-     * 
-     * @return Current counts of airports, flights, orders, and products in database
-     */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getImportStatus() {
-        // This endpoint could be extended to show import statistics
         Map<String, Object> status = new HashMap<>();
         status.put("message", "Data import endpoints are operational");
         status.put("endpoints", Map.of(
-            "airports", "/api/data-import/airports (POST)",
-            "flights", "/api/data-import/flights (POST)",
-            "orders", "/api/data-import/orders (POST)"
+                "airports", "/api/data-import/airports (POST)",
+                "flights", "/api/data-import/flights (POST)",
+                "orders", "/api/data-import/orders (POST)"
         ));
         return ResponseEntity.ok(status);
     }
+
+    @PostMapping("/orders-by-date")
+    public ResponseEntity<Map<String, Object>> importOrdersByDateRange(
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate) {
+
+        Map<String, Object> result = dataImportService.importOrdersByDateRange(startDate, endDate);
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(result);
+    }
 }
-
-
