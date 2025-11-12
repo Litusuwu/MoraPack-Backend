@@ -267,20 +267,25 @@ public class DataImportService {
             for (OrderSchema orderSchema : orderSchemas) {
                 // Handle Order
                 City destCity = cityMap.get(orderSchema.getDestinationCitySchema().getName());
-                City originCity = cityMap.get(orderSchema.getCurrentLocation().getName());
-                
+
+                // FIX: Origin should be one of the THREE MAIN WAREHOUSES (Lima, Brussels, Baku)
+                // NOT the currentLocation from OrderSchema - that's just where the order was registered
+                // Assign based on destination continent for optimal routing
+                City originCity = getMainWarehouseForContinent(destCity, cityMap);
+
                 if (destCity == null || originCity == null) {
                     System.err.println("Warning: Could not find cities for order " + orderSchema.getId());
                     continue;
                 }
-                
+
                 Order order = Order.builder()
-                        .name("ORDER-" + orderSchema.getId())
+                        .name(orderSchema.getName() != null ? orderSchema.getName() : "ORDER-" + orderSchema.getId())
                         .customer(defaultCustomer)
+                        .creationDate(orderSchema.getOrderDate())  // FIX: Set actual order date from file
                         .deliveryDate(orderSchema.getDeliveryDeadline())
                         .pickupTimeHours((double) orderSchema.getOrderDate().getHour())
                         .status(orderSchema.getStatus())
-                        .origin(originCity)
+                        .origin(originCity)  // Now uses main warehouse city
                         .destination(destCity)
                         .build();
                 
@@ -387,6 +392,43 @@ public class DataImportService {
         return origin.getCity().getContinent().equals(destination.getCity().getContinent());
     }
     
+    /**
+     * Get the main warehouse city for a given destination city
+     * Main warehouses: Lima (America), Brussels (Europe), Baku (Asia)
+     * These have unlimited stock capacity
+     */
+    private City getMainWarehouseForContinent(City destinationCity, Map<String, City> cityMap) {
+        String warehouseCityName;
+
+        switch (destinationCity.getContinent()) {
+            case America:
+                warehouseCityName = "Lima";
+                break;
+            case Europa:
+                warehouseCityName = "Bruselas";  // Brussels in Spanish
+                break;
+            case Asia:
+                warehouseCityName = "Baku";
+                break;
+            default:
+                // Fallback to Lima for unknown continents
+                warehouseCityName = "Lima";
+                System.err.println("Warning: Unknown continent " + destinationCity.getContinent() +
+                                 ", defaulting to Lima warehouse");
+        }
+
+        // Search for the warehouse city (case-insensitive)
+        for (Map.Entry<String, City> entry : cityMap.entrySet()) {
+            String cityName = entry.getKey();
+            if (cityName.toLowerCase().contains(warehouseCityName.toLowerCase()) ||
+                warehouseCityName.toLowerCase().contains(cityName.toLowerCase())) {
+                return entry.getValue();
+            }
+        }
+
+        throw new IllegalStateException("Main warehouse city not found: " + warehouseCityName);
+    }
+
     /**
      * Get or create a default customer for data import.
      * This avoids the need to create individual customers for each order during import.

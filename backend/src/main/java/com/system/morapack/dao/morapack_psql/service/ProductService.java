@@ -45,6 +45,10 @@ public class ProductService {
     return productRepository.saveAll(products);
   }
 
+  public Product save(Product product) {
+    return productRepository.save(product);
+  }
+
   public Product updateProduct(Integer id, Product updates) {
     Product product = getProduct(id);
 

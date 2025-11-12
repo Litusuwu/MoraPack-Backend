@@ -254,7 +254,7 @@ public class AlgorithmController {
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
 
       // NEW: Get order splits for batch persistence
-      Map<Integer, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
       int productsCreated = 0;
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
@@ -324,7 +324,7 @@ public class AlgorithmController {
                         (executionTime / 60) + " minutes)");
 
       // NEW: Get order splits for batch persistence
-      Map<Integer, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
       int productsCreated = 0;
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
@@ -370,18 +370,18 @@ public class AlgorithmController {
    * Enables batch persistence of order splits to database
    */
   private List<AlgorithmPersistenceService.OrderSplit> convertToOrderSplits(
-      Map<Integer, List<Solution.OrderSplitInfo>> orderSplitsMap) {
+      Map<String, List<Solution.OrderSplitInfo>> orderSplitsMap) {
 
     List<AlgorithmPersistenceService.OrderSplit> splits = new ArrayList<>();
 
-    for (Map.Entry<Integer, List<Solution.OrderSplitInfo>> entry : orderSplitsMap.entrySet()) {
-      Integer orderId = entry.getKey();
+    for (Map.Entry<String, List<Solution.OrderSplitInfo>> entry : orderSplitsMap.entrySet()) {
+      String orderName = entry.getKey();
       List<Solution.OrderSplitInfo> splitInfos = entry.getValue();
 
       for (Solution.OrderSplitInfo splitInfo : splitInfos) {
         AlgorithmPersistenceService.OrderSplit split =
             new AlgorithmPersistenceService.OrderSplit(
-                orderId,
+                orderName,
                 splitInfo.quantity,
                 splitInfo.assignedRoute
             );

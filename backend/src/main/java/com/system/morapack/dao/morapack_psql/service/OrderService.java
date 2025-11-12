@@ -21,6 +21,11 @@ public class OrderService {
         .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + id));
   }
 
+  public Order getOrderByName(String name) {
+    return orderRepository.findByName(name)
+        .orElseThrow(() -> new EntityNotFoundException("Order not found with name: " + name));
+  }
+
   public List<Order> fetchOrders(List<Integer> ids) {
     if (ids == null || ids.isEmpty()) {
       return orderRepository.findAll();

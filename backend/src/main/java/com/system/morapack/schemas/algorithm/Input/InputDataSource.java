@@ -2,10 +2,14 @@ package com.system.morapack.schemas.algorithm.Input;
 
 import com.system.morapack.schemas.AirportSchema;
 import com.system.morapack.schemas.FlightSchema;
+import com.system.morapack.schemas.FlightInstanceSchema;
 import com.system.morapack.schemas.OrderSchema;
+import com.system.morapack.schemas.ProductSchema;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Interface for abstracting data input sources for the ALNS algorithm.
@@ -81,5 +85,40 @@ public interface InputDataSource {
      */
     default void cleanup() {
         // Default: no cleanup needed
+    }
+
+    /**
+     * NEW: Loads flight instances for the simulation window
+     * This expands flight templates into daily instances with per-instance capacity tracking
+     *
+     * @param flightTemplates Base flight templates from loadFlights()
+     * @param simulationStartTime Start of simulation window
+     * @param simulationEndTime End of simulation window
+     * @return List of FlightInstanceSchema objects, one per daily departure
+     */
+    default List<FlightInstanceSchema> loadFlightInstances(
+            List<FlightSchema> flightTemplates,
+            LocalDateTime simulationStartTime,
+            LocalDateTime simulationEndTime) {
+        // Default: No expansion, return empty list
+        // Implementations should use FlightExpansionService for proper expansion
+        System.out.println("[WARNING] Flight instance expansion not implemented for " + getSourceName());
+        return new ArrayList<>();
+    }
+
+    /**
+     * NEW: Loads existing product assignments from the database for re-runs
+     * This enables the algorithm to build on previous runs instead of starting fresh
+     *
+     * @param simulationStartTime Start of simulation window
+     * @param simulationEndTime End of simulation window
+     * @return Map of FlightInstance ID -> List of assigned ProductSchema
+     */
+    default Map<String, List<ProductSchema>> loadExistingProductAssignments(
+            LocalDateTime simulationStartTime,
+            LocalDateTime simulationEndTime) {
+        // Default: No existing assignments
+        System.out.println("[INFO] No existing product assignments loaded (fresh run)");
+        return Map.of(); // Empty map
     }
 }

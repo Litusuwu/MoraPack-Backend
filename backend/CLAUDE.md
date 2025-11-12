@@ -52,6 +52,12 @@ mvn test
 
 # Run specific test class
 mvn test -Dtest=MoraPackApplicationTests
+
+# Test complete simulation flow (algorithm + time simulation)
+./TEST_SIMULATION.sh
+
+# Test simulation endpoints manually
+./test_morapack.sh  # Full algorithm test with flight instances
 ```
 
 ### Database
@@ -408,6 +414,139 @@ curl -X POST http://localhost:8080/api/algorithm/weekly \
 - `bll/controller/AlgorithmController.java` - Integrate persistence
 - `api/OrderQueryAPI.java` - Create query endpoints (NEW FILE)
 
+### Issue #6: Product State Simulation ✅ **COMPLETED**
+
+**Status:** ✅ Fully implemented
+
+**Problem:** Products assigned to flights remain stuck in `IN_TRANSIT` state because the algorithm assigns flights but doesn't simulate time passage for state transitions.
+
+**Solution:** Created simulation time management system with frontend-controlled time advancement.
+
+**Implementation:**
+
+1. ✅ **SimulationTimeService.java** - Core time simulation logic:
+   ```java
+   @Transactional
+   public SimulationUpdateStats updateProductStates(LocalDateTime currentSimulationTime)
+   ```
+   - Calculates product arrival times from `assigned_flight_instance` and flight transport times
+   - Implements state machine: `PENDING → IN_TRANSIT → ARRIVED → DELIVERED`
+   - Transition rules:
+     - `IN_TRANSIT`: Product hasn't arrived yet (currentTime < arrivalTime)
+     - `ARRIVED`: Product arrived but within 2-hour pickup window
+     - `DELIVERED`: More than 2 hours since arrival (customer picked up)
+   - Updates both product and order states
+   - Returns statistics for each state transition
+
+2. ✅ **SimulationAPI.java** - REST endpoints for frontend control:
+   - `POST /api/simulation/update-states` - Update states for specific simulation time
+   - `POST /api/simulation/advance-time` - Advance time by N hours and update states
+   - `GET /api/simulation/status` - Get simulation status info
+
+3. ✅ **ProductService.java** - Added missing methods:
+   - `save(Product)` - Direct product save method for state updates
+
+4. ✅ **TEST_SIMULATION.sh** - Complete testing script:
+   - Loads orders for 1 day
+   - Runs algorithm (assigns flights)
+   - Advances time progressively (8h → 20h → 36h)
+   - Verifies state transitions with database queries
+   - Shows before/after statistics
+
+**How It Works:**
+
+Frontend controls simulation time progression:
+```javascript
+// Frontend simulation clock
+let simulationTime = new Date("2025-01-02T00:00:00");
+
+setInterval(() => {
+  simulationTime = new Date(simulationTime.getTime() + 30 * 60 * 1000); // +30 min
+
+  fetch('/api/simulation/update-states', {
+    method: 'POST',
+    body: JSON.stringify({ currentTime: simulationTime.toISOString() })
+  });
+}, 30000); // Every 30 seconds real time
+```
+
+Backend calculates arrivals:
+```
+1. Parse assigned_flight_instance: "FL-45-DAY-0-2000"
+2. Calculate departure: orderDate + DAY-0 + 20:00 = 2025-01-02 20:00
+3. Get transport time: flight.transportTimeDays = 0.5 days (12 hours)
+4. Calculate arrival: 2025-01-03 08:00
+5. Compare with currentTime:
+   - If < 08:00 → IN_TRANSIT
+   - If >= 08:00 and < 10:00 → ARRIVED
+   - If >= 10:00 → DELIVERED
+```
+
+**Files Created:**
+- `bll/service/SimulationTimeService.java` (~300 lines) - State update logic
+- `api/SimulationAPI.java` (~180 lines) - REST endpoints
+- `TEST_SIMULATION.sh` (~200 lines) - Automated testing script
+- `SOLUCION_ESTADOS.md` - Complete documentation with examples
+
+**Files Modified:**
+- `dao/morapack_psql/service/ProductService.java:48-50` - Added `save()` method
+
+**Endpoint Examples:**
+```bash
+# Update states for specific simulation time
+curl -X POST "http://localhost:8080/api/simulation/update-states" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentTime": "2025-01-02T12:00:00"
+  }'
+
+# Advance time by N hours
+curl -X POST "http://localhost:8080/api/simulation/advance-time" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentTime": "2025-01-02T00:00:00",
+    "hoursToAdvance": 8
+  }'
+
+# Get simulation status
+curl -X GET "http://localhost:8080/api/simulation/status"
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "currentSimulationTime": "2025-01-02T12:00:00",
+  "transitions": {
+    "pendingToInTransit": 0,
+    "inTransitToArrived": 45,
+    "arrivedToDelivered": 12,
+    "total": 57
+  }
+}
+```
+
+**Testing:**
+```bash
+# Run complete test
+./TEST_SIMULATION.sh
+
+# Or manual test
+curl -X POST "http://localhost:8080/api/simulation/update-states" \
+  -H "Content-Type: application/json" \
+  -d '{"currentTime": "2025-01-02T12:00:00"}'
+
+# Verify states
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT status, COUNT(*) FROM products GROUP BY status;"
+```
+
+**Integration:** This feature is independent and works with existing flight assignment logic. Frontend can now:
+1. Run algorithm (assigns products to flights with `IN_TRANSIT` status)
+2. Advance simulation time (transitions products to `ARRIVED`/`DELIVERED`)
+3. Query current state from database
+4. Display real-time tracking on map
+
 ## Current Development Tasks
 
 Priority order for implementation:
@@ -434,14 +573,23 @@ Priority order for implementation:
    - ✅ Implement `AlgorithmPersistenceService.java`
    - ✅ Add `OrderSplit` data structure
    - ✅ Add batch DB insert methods
-8. 🔄 **Implement order splitting in ALNS** - IN PROGRESS
+8. ✅ **Implement product state simulation** - COMPLETED
+   - ✅ Create `SimulationTimeService.java` for state updates
+   - ✅ Create `SimulationAPI.java` with `/update-states` and `/advance-time` endpoints
+   - ✅ Add `save()` method to `ProductService.java`
+   - ✅ Create `TEST_SIMULATION.sh` testing script
+   - ✅ Document solution in `SOLUCION_ESTADOS.md`
+   - ✅ Implement state transitions: PENDING → IN_TRANSIT → ARRIVED → DELIVERED
+   - ✅ Calculate arrival times from flight instances and transport times
+   - ✅ Update order states based on product states
+9. 🔄 **Implement order splitting in ALNS** - IN PROGRESS
    - ⏳ Add splitting logic when order doesn't fit
    - ⏳ Track splits in memory during algorithm execution
    - ⏳ Return splits to controller for persistence
-9. ⏳ **Integrate persistence with controller** - PENDING
-   - Call `persistSolution()` after algorithm completes
-   - Update API response with DB insert results
-10. ⏳ **Create frontend query endpoints** - PENDING
+10. ⏳ **Integrate persistence with controller** - PENDING
+    - Call `persistSolution()` after algorithm completes
+    - Update API response with DB insert results
+11. ⏳ **Create frontend query endpoints** - PENDING
     - Add `OrderQueryAPI.java` with query methods
     - Implement time window queries
     - Implement order/product status queries
@@ -637,6 +785,125 @@ GET /api/warehouse/occupancy/{airportCode}          // Warehouse status
 - `POST /api/algorithm/daily` - Incremental 30-minute windows, runs indefinitely
 - `POST /api/algorithm/weekly` - 7-day batch processing, 30-90 minute execution
 - `POST /api/algorithm/collapse` - Future: stress test until system breaks
+
+## REST API Endpoints Summary
+
+Complete list of available backend endpoints for frontend integration:
+
+### Algorithm Execution Endpoints
+
+**POST /api/algorithm/daily** - Run algorithm for daily scenario
+```bash
+curl -X POST "http://localhost:8080/api/algorithm/daily" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationHours": 0.5,
+    "useDatabase": true
+  }'
+```
+- **Purpose:** Incremental 30-minute time windows for real-time operations
+- **Response:** Algorithm results with assigned/unassigned product counts
+
+**POST /api/algorithm/weekly** - Run algorithm for weekly scenario
+```bash
+curl -X POST "http://localhost:8080/api/algorithm/weekly" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationDays": 7,
+    "useDatabase": true
+  }'
+```
+- **Purpose:** 7-day batch processing (30-90 minute execution time)
+- **Response:** Complete week routing solution
+
+### Simulation Time Control Endpoints
+
+**POST /api/simulation/update-states** - Update product states for given simulation time
+```bash
+curl -X POST "http://localhost:8080/api/simulation/update-states" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentTime": "2025-01-02T12:00:00"
+  }'
+```
+- **Purpose:** Frontend-controlled time advancement
+- **Response:** State transition statistics (PENDING → IN_TRANSIT → ARRIVED → DELIVERED)
+
+**POST /api/simulation/advance-time** - Advance simulation time by N hours
+```bash
+curl -X POST "http://localhost:8080/api/simulation/advance-time" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentTime": "2025-01-02T00:00:00",
+    "hoursToAdvance": 8
+  }'
+```
+- **Purpose:** Convenient time progression
+- **Response:** New time and state transition statistics
+
+**GET /api/simulation/status** - Get simulation status
+```bash
+curl -X GET "http://localhost:8080/api/simulation/status"
+```
+- **Purpose:** Check simulation state
+- **Response:** Current simulation info
+
+### Data Loading Endpoints
+
+**POST /api/data/load-orders** - Load orders from files for time window
+```bash
+curl -X POST "http://localhost:8080/api/data/load-orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "startDate": "2025-01-02T00:00:00",
+    "endDate": "2025-01-08T23:59:59"
+  }'
+```
+- **Purpose:** Load orders from `_pedidos_{AIRPORT}_` files
+- **Response:** Count of orders loaded
+
+**POST /api/data-import/airports** - Load airports from file
+```bash
+curl -X POST "http://localhost:8080/api/data-import/airports" \
+  -H "Content-Type: application/json"
+```
+- **Purpose:** Load airport and warehouse data from `airportInfo.txt`
+- **Response:** Count of airports imported
+
+**POST /api/data-import/flights** - Load flights from file
+```bash
+curl -X POST "http://localhost:8080/api/data-import/flights" \
+  -H "Content-Type: application/json"
+```
+- **Purpose:** Load flight routes from `flights.txt`
+- **Response:** Count of flights imported
+
+### Database Query Endpoints (Pending Implementation)
+
+These endpoints are needed for frontend to query current state:
+
+**GET /api/orders?startTime={time}&endTime={time}** - ⏳ PENDING
+- Get orders in time window with current status
+
+**GET /api/products/{orderId}** - ⏳ PENDING
+- Get product splits for specific order
+
+**GET /api/flights/status** - ⏳ PENDING
+- Get current flight assignments and capacity
+
+**GET /api/warehouse/occupancy/{airportCode}** - ⏳ PENDING
+- Get warehouse occupancy status
+
+### Testing Endpoints
+
+**GET /actuator/health** - Health check
+```bash
+curl http://localhost:8080/actuator/health
+```
+- **Purpose:** Verify backend is running
+- **Response:** `{"status":"UP"}`
 
 ## Problem Statement
 

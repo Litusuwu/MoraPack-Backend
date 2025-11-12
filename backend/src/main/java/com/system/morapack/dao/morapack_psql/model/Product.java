@@ -48,6 +48,14 @@ public class Product {
   private String assignedFlight;
 
   /**
+   * NEW: Specific flight instance assigned to this product (for multi-day simulations)
+   * Format: "FL-{flightId}-DAY-{day}-{HHmm}" (e.g., "FL-123-DAY-1-0800")
+   * This allows tracking which SPECIFIC departure the product is assigned to
+   */
+  @Column(name = "assigned_flight_instance", length = 100)
+  private String assignedFlightInstance;
+
+  /**
    * List of flights assigned to this product in sequence order
    * For direct flights: 1 entry
    * For multi-hop routes: multiple entries in order (e.g., LIM-AQP, AQP-CUZ)

@@ -252,11 +252,14 @@ public class DataLoadService {
      * Build Order entity from parsed data (after customers are created)
      */
     private Order buildOrderEntity(ParsedOrderData data) {
-        // Get entities from cache
-        Airport originAirport = getAirportByCode(data.originAirportCode);
+        // Get destination airport from order data
         Airport destinationAirport = getAirportByCode(data.destinationAirportCode);
-        City originCity = originAirport.getCity();
         City destinationCity = destinationAirport.getCity();
+
+        // FIX: Origin should be one of the THREE MAIN WAREHOUSES (Lima, Brussels, Baku)
+        // NOT the file's airport - that's just where the order was registered
+        // Assign based on destination continent for optimal routing
+        City originCity = getMainWarehouseForContinent(destinationCity.getContinent());
 
         // Calculate delivery deadline based on origin/destination continents
         // Business rules: 2 days max (same continent), 3 days max (different continent)
@@ -273,7 +276,7 @@ public class DataLoadService {
         // Build Order entity
         return Order.builder()
             .name("Order-" + data.orderId + "-" + data.destinationAirportCode)
-            .origin(originCity)
+            .origin(originCity)  // Now uses main warehouse city
             .destination(destinationCity)
             .deliveryDate(deliveryDeadline)
             .status(PackageStatus.PENDING)
@@ -281,6 +284,47 @@ public class DataLoadService {
             .creationDate(data.orderDate)
             .customer(customer)
             .build();
+    }
+
+    /**
+     * Get the main warehouse city for a given destination continent
+     * Main warehouses: Lima (America), Brussels (Europe), Baku (Asia)
+     * These have unlimited stock capacity
+     */
+    private City getMainWarehouseForContinent(com.system.morapack.schemas.Continent continent) {
+        String warehouseCityName;
+
+        switch (continent) {
+            case America:
+                warehouseCityName = "Lima";
+                break;
+            case Europa:
+                warehouseCityName = "Bruselas";  // Brussels in Spanish
+                break;
+            case Asia:
+                warehouseCityName = "Baku";
+                break;
+            default:
+                // Fallback to Lima for unknown continents
+                warehouseCityName = "Lima";
+                System.err.println("Warning: Unknown continent " + continent + ", defaulting to Lima warehouse");
+        }
+
+        // Try to find the city by name (case-insensitive)
+        try {
+            // Search through airport cache for the main warehouse city
+            for (Airport airport : airportCache.values()) {
+                City city = airport.getCity();
+                if (city.getName().toLowerCase().contains(warehouseCityName.toLowerCase()) ||
+                    warehouseCityName.toLowerCase().contains(city.getName().toLowerCase())) {
+                    return city;
+                }
+            }
+
+            throw new IllegalStateException("Main warehouse city not found: " + warehouseCityName);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to find main warehouse for continent " + continent + ": " + e.getMessage(), e);
+        }
     }
 
     /**

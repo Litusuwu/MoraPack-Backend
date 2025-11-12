@@ -1,0 +1,147 @@
+# COMANDOS CURL PARA PROBAR MORAPACK
+# Copia y pega estos comandos en tu terminal (uno por uno)
+
+# ============================================
+# PASO 1: VERIFICAR BACKEND
+# ============================================
+curl http://localhost:8080/actuator/health
+
+# ============================================
+# PASO 2: CARGAR AIRPORTS (Ya hecho ✓)
+# ============================================
+curl -X POST http://localhost:8080/api/data-import/airports \
+  -H "Content-Type: application/json"
+
+# ============================================
+# PASO 3: CARGAR FLIGHTS (Ya hecho ✓)
+# ============================================
+curl -X POST http://localhost:8080/api/data-import/flights \
+  -H "Content-Type: application/json"
+
+# ============================================
+# PASO 4: CARGAR ORDERS (2025-01-02 a 2025-01-08)
+# ============================================
+curl -X POST "http://localhost:8080/api/data/load-orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "startDate": "2025-01-02T00:00:00",
+    "endDate": "2025-01-08T23:59:59"
+  }'
+
+# ============================================
+# PASO 5: EJECUTAR ALGORITMO WEEKLY (30-90 min)
+# ============================================
+curl -X POST "http://localhost:8080/api/algorithm/weekly" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationDays": 7,
+    "useDatabase": true
+  }'
+
+# O usando endpoint /execute (alternativo):
+curl -X POST "http://localhost:8080/api/algorithm/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationEndTime": "2025-01-09T00:00:00",
+    "useDatabase": true
+  }'
+
+# ============================================
+# PASO 6: VERIFICAR PRODUCTOS EN DB
+# ============================================
+# Contar productos con flight instance
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT COUNT(*) FROM products WHERE assigned_flight_instance IS NOT NULL;"
+
+# Ver primeros 10 productos
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT id, order_id, status, assigned_flight_instance, assigned_flight
+   FROM products
+   WHERE assigned_flight_instance IS NOT NULL
+   LIMIT 10;"
+
+# Distribución por día
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT
+    SUBSTRING(assigned_flight_instance FROM 'DAY-(\d+)') as day,
+    COUNT(*) as products
+   FROM products
+   WHERE assigned_flight_instance IS NOT NULL
+   GROUP BY SUBSTRING(assigned_flight_instance FROM 'DAY-(\d+)')
+   ORDER BY day;"
+
+# ============================================
+# PASO 7: RE-RUN (debe ser RÁPIDO < 60s)
+# ============================================
+curl -X POST "http://localhost:8080/api/algorithm/weekly" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationDays": 7,
+    "useDatabase": true
+  }'
+
+# ============================================
+# PASO 8: VERIFICAR QUE NO DUPLICÓ
+# ============================================
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT COUNT(*) FROM products WHERE assigned_flight_instance IS NOT NULL;"
+
+# Debe ser el mismo número que después del PASO 6
+
+# ============================================
+# OPCIONAL: ALGORITMO DAILY (8 horas)
+# ============================================
+curl -X POST "http://localhost:8080/api/algorithm/daily" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulationStartTime": "2025-01-02T00:00:00",
+    "simulationDurationHours": 8,
+    "useDatabase": true
+  }'
+
+# ============================================
+# CONSULTAS SQL ÚTILES
+# ============================================
+
+# Ver vuelos más usados
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT
+    assigned_flight_instance,
+    COUNT(*) as products_assigned
+   FROM products
+   WHERE assigned_flight_instance IS NOT NULL
+   GROUP BY assigned_flight_instance
+   ORDER BY products_assigned DESC
+   LIMIT 10;"
+
+# Ver capacidad por vuelo
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT
+    SUBSTRING(assigned_flight_instance FROM '^FL-(\d+)') as flight_id,
+    SUBSTRING(assigned_flight_instance FROM 'DAY-(\d+)') as day,
+    assigned_flight_instance,
+    COUNT(*) as products_count
+   FROM products
+   WHERE assigned_flight_instance IS NOT NULL
+   GROUP BY assigned_flight_instance
+   ORDER BY flight_id, day
+   LIMIT 20;"
+
+# Ver estado de órdenes
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT
+    status,
+    COUNT(*) as order_count
+   FROM orders
+   GROUP BY status;"
+
+# Ver productos por status
+psql -h localhost -p 5435 -U postgres -d postgres -c \
+  "SELECT
+    status,
+    COUNT(*) as product_count
+   FROM products
+   GROUP BY status;"

@@ -1,5 +1,6 @@
 package com.system.morapack.schemas.algorithm.Input;
 
+import com.system.morapack.bll.service.FlightExpansionService;
 import com.system.morapack.dao.morapack_psql.model.Airport;
 import com.system.morapack.dao.morapack_psql.model.City;
 import com.system.morapack.dao.morapack_psql.model.Customer;
@@ -13,6 +14,7 @@ import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.schemas.AirportSchema;
 import com.system.morapack.schemas.CitySchema;
 import com.system.morapack.schemas.CustomerSchema;
+import com.system.morapack.schemas.FlightInstanceSchema;
 import com.system.morapack.schemas.FlightSchema;
 import com.system.morapack.schemas.OrderSchema;
 import com.system.morapack.schemas.ProductSchema;
@@ -55,6 +57,9 @@ public class DatabaseInputDataSource implements InputDataSource {
 
     @Autowired
     private ProductService productService;
+
+    @Autowired
+    private FlightExpansionService flightExpansionService;
 
     // Cache para evitar conversiones repetidas
     private Map<Integer, AirportSchema> airportSchemaCache;
@@ -136,8 +141,27 @@ public class DatabaseInputDataSource implements InputDataSource {
 
         for (Order order : allOrders) {
             // Filter by creation date (order date)
-            LocalDateTime orderDate = order.getCreationDate() != null ?
-                    order.getCreationDate() : LocalDateTime.now();
+            // WORKAROUND: If creationDate is not properly set (e.g., set to DB insertion time),
+            // calculate approximate order date from delivery date
+            LocalDateTime orderDate;
+            if (order.getCreationDate() != null) {
+                LocalDateTime creationDate = order.getCreationDate();
+                LocalDateTime deliveryDate = order.getDeliveryDate();
+
+                // Check if creationDate looks like a DB timestamp (after delivery date)
+                // This indicates creationDate was auto-set during import, not from file
+                if (creationDate.isAfter(deliveryDate)) {
+                    // Calculate order date from delivery date (typically order_date + 2-3 days = delivery_date)
+                    // Use conservative estimate: delivery_date - 3 days
+                    orderDate = deliveryDate.minusDays(3);
+                    System.out.println("[DATABASE] Warning: Order " + order.getName() +
+                                     " has creationDate after deliveryDate. Using calculated orderDate: " + orderDate);
+                } else {
+                    orderDate = creationDate;
+                }
+            } else {
+                orderDate = LocalDateTime.now();
+            }
 
             // Skip orders outside simulation time window
             if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
@@ -243,7 +267,33 @@ public class DatabaseInputDataSource implements InputDataSource {
         OrderSchema orderSchema = new OrderSchema();
 
         orderSchema.setId(order.getId());
-        orderSchema.setOrderDate(order.getCreationDate() != null ? order.getCreationDate() : LocalDateTime.now());
+        orderSchema.setName(order.getName()); // Set order name for persistence lookup
+
+        // DEBUG: Log order name to verify it's being set
+        if (order.getName() == null) {
+            System.err.println("WARNING: Order " + order.getId() + " has NULL name in database!");
+        } else {
+            System.out.println("Loaded order: " + order.getName());
+        }
+
+        // Calculate proper order date (same logic as filtering)
+        LocalDateTime orderDate;
+        if (order.getCreationDate() != null) {
+            LocalDateTime creationDate = order.getCreationDate();
+            LocalDateTime deliveryDate = order.getDeliveryDate();
+
+            // Check if creationDate looks like a DB timestamp (after delivery date)
+            if (creationDate.isAfter(deliveryDate)) {
+                // Calculate order date from delivery date
+                orderDate = deliveryDate.minusDays(3);
+            } else {
+                orderDate = creationDate;
+            }
+        } else {
+            orderDate = LocalDateTime.now();
+        }
+
+        orderSchema.setOrderDate(orderDate);
         orderSchema.setDeliveryDeadline(order.getDeliveryDate());
         orderSchema.setStatus(order.getStatus()); // Already PackageStatus in both JPA and Schema
 
@@ -359,5 +409,91 @@ public class DatabaseInputDataSource implements InputDataSource {
             }
         }
         return null;
+    }
+
+    /**
+     * NEW: Loads flight instances for the simulation window
+     * Uses FlightExpansionService to expand flight templates into daily instances
+     */
+    @Override
+    public List<FlightInstanceSchema> loadFlightInstances(
+            List<FlightSchema> flightTemplates,
+            LocalDateTime simulationStartTime,
+            LocalDateTime simulationEndTime) {
+
+        System.out.println("[DATABASE] Expanding flight templates into daily instances...");
+
+        // Use FlightExpansionService to expand flights across simulation window
+        List<FlightInstanceSchema> instances = flightExpansionService.expandFlightsForSimulation(
+            flightTemplates,
+            simulationStartTime,
+            simulationEndTime
+        );
+
+        // Print summary
+        flightExpansionService.printExpansionSummary(instances);
+
+        return instances;
+    }
+
+    /**
+     * NEW: Loads existing product assignments from database for re-runs
+     * This enables the algorithm to build on previous runs
+     *
+     * Returns: Map<FlightInstanceID, List<ProductSchema>>
+     * Example: "LIM-CUZ-2025-01-02-20:00" -> [Product1, Product2, ...]
+     */
+    @Override
+    public Map<String, List<ProductSchema>> loadExistingProductAssignments(
+            LocalDateTime simulationStartTime,
+            LocalDateTime simulationEndTime) {
+
+        System.out.println("[DATABASE] Loading existing product assignments for re-run support...");
+        System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
+
+        Map<String, List<ProductSchema>> assignmentMap = new HashMap<>();
+
+        // Fetch all products (we'll filter them)
+        List<Product> allProducts = productService.fetchProducts(null);
+
+        int loadedCount = 0;
+        int skippedCount = 0;
+
+        for (Product product : allProducts) {
+            // Only load products that:
+            // 1. Have an assigned flight instance
+            // 2. Are within simulation window (based on order date or flight schedule)
+            // 3. Status is ASSIGNED or IN_TRANSIT
+
+            if (product.getAssignedFlightInstance() == null ||
+                product.getAssignedFlightInstance().trim().isEmpty()) {
+                skippedCount++;
+                continue; // Skip unassigned products
+            }
+
+            // Check status - only load products that are pending or in transit
+            com.system.morapack.schemas.PackageStatus status = product.getStatus();
+            if (status != com.system.morapack.schemas.PackageStatus.PENDING &&
+                status != com.system.morapack.schemas.PackageStatus.IN_TRANSIT) {
+                skippedCount++;
+                continue; // Skip delivered or delayed products
+            }
+
+            // Convert to ProductSchema
+            ProductSchema productSchema = convertToProductSchema(product);
+
+            // Group by flight instance ID
+            String flightInstanceId = product.getAssignedFlightInstance();
+            assignmentMap.computeIfAbsent(flightInstanceId, k -> new ArrayList<>())
+                         .add(productSchema);
+
+            loadedCount++;
+        }
+
+        System.out.println("[DATABASE] Loaded " + loadedCount + " existing product assignments");
+        System.out.println("[DATABASE] Skipped " + skippedCount + " products (unassigned or completed)");
+        System.out.println("[DATABASE] Flight instances with assignments: " + assignmentMap.size());
+
+        return assignmentMap;
     }
 }

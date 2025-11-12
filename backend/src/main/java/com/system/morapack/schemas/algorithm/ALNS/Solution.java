@@ -85,8 +85,8 @@ public class Solution {
 
     // NEW: Order splitting tracking for batch persistence
     // Tracks order splits created during algorithm execution
-    // Format: Map<orderId, List<SplitInfo>> where SplitInfo = {quantity, route}
-    private Map<Integer, List<OrderSplitInfo>> orderSplits;
+    // Format: Map<orderName, List<SplitInfo>> where SplitInfo = {quantity, route}
+    private Map<String, List<OrderSplitInfo>> orderSplits;
 
     /**
      * Inner class to track order split information
@@ -382,7 +382,7 @@ public class Solution {
      * Returns map of order ID to list of splits (quantity + route)
      * This enables batch DB inserts after algorithm completes
      */
-    public Map<Integer, List<OrderSplitInfo>> getOrderSplits() {
+    public Map<String, List<OrderSplitInfo>> getOrderSplits() {
         return orderSplits;
     }
 
@@ -390,14 +390,14 @@ public class Solution {
      * Track an order assignment or split
      * Called when an order (or part of it) is assigned to a route
      */
-    private void trackOrderAssignment(Integer orderId, Integer quantity, ArrayList<FlightSchema> route) {
-        if (!orderSplits.containsKey(orderId)) {
-            orderSplits.put(orderId, new ArrayList<>());
+    private void trackOrderAssignment(String orderName, Integer quantity, ArrayList<FlightSchema> route) {
+        if (!orderSplits.containsKey(orderName)) {
+            orderSplits.put(orderName, new ArrayList<>());
         }
-        orderSplits.get(orderId).add(new OrderSplitInfo(quantity, route));
+        orderSplits.get(orderName).add(new OrderSplitInfo(quantity, route));
 
         if (Constants.VERBOSE_LOGGING) {
-            System.out.println("Tracked assignment: Order " + orderId + " - " + quantity + " items on route");
+            System.out.println("Tracked assignment: Order " + orderName + " - " + quantity + " items on route");
         }
     }
 
@@ -1369,6 +1369,7 @@ public class Solution {
         unit.setId(unitIdString.hashCode());
         
         // Copiar todos los metadatos del paquete original
+        unit.setName(originalPkg.getName());  // CRITICAL: Copy order name for database persistence
         unit.setCustomerSchema(originalPkg.getCustomerSchema());
         unit.setDestinationCitySchema(originalPkg.getDestinationCitySchema());
         unit.setOrderDate(originalPkg.getOrderDate());
@@ -1611,7 +1612,7 @@ public class Solution {
         // Check if this partial order can be assigned
         if (canAssignWithSpaceOptimization(testPkg, route, currentSolution)) {
             // Track this split for batch persistence
-            trackOrderAssignment(originalPkg.getId(), quantity, route);
+            trackOrderAssignment(originalPkg.getName(), quantity, route);
 
             // Update capacities
             updateFlightCapacities(route, quantity);
@@ -1929,7 +1930,7 @@ public class Solution {
                         incrementWarehouseOccupancy(destinationAirportSchema, productCount);
 
                         // NEW: Track this assignment for batch persistence
-                        trackOrderAssignment(pkg.getId(), productCount, bestRoute);
+                        trackOrderAssignment(pkg.getName(), productCount, bestRoute);
 
                         if (iteration > 0) {
                             System.out.println("  Reasignado paquete " + pkg.getId() + " en iteración " + iteration);
