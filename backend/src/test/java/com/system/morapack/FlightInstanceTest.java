@@ -265,7 +265,7 @@ public class FlightInstanceTest {
         CitySchema city = new CitySchema();
         city.setId(id);
         city.setName(cityName);
-        city.setContinent(Continent.AMERICA);
+        city.setContinent(Continent.America);
 
         AirportSchema airport = new AirportSchema();
         airport.setId(id);
