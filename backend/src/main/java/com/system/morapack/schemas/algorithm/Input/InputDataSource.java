@@ -38,12 +38,32 @@ public interface InputDataSource {
     ArrayList<FlightSchema> loadFlights(ArrayList<AirportSchema> airports);
 
     /**
-     * Loads all orders/products from the data source
+     * Loads all orders/products from the data source (without time filtering)
      *
      * @param airports List of airports to link products to (for location references)
      * @return List of OrderSchema objects with complete information (including ProductSchemas)
+     * @deprecated Use loadOrders(airports, simulationStartTime, simulationEndTime) instead
      */
+    @Deprecated
     ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports);
+
+    /**
+     * Loads orders/products from the data source within a specific time window
+     * This is the preferred method for daily and weekly scenarios
+     *
+     * @param airports List of airports to link products to
+     * @param simulationStartTime Start of time window (inclusive)
+     * @param simulationEndTime End of time window (inclusive)
+     * @return List of OrderSchema objects created within the time window
+     */
+    default ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
+                                              LocalDateTime simulationStartTime,
+                                              LocalDateTime simulationEndTime) {
+        // Default implementation: call legacy method (no filtering)
+        // Implementations should override this to support time window filtering
+        System.out.println("[WARNING] Time window filtering not implemented for " + getSourceName() + " data source");
+        return loadOrders(airports);
+    }
 
     /**
      * Returns the name of this data source for logging purposes

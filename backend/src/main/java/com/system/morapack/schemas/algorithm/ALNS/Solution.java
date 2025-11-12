@@ -1,9 +1,7 @@
 package com.system.morapack.schemas.algorithm.ALNS;
 
 import com.system.morapack.schemas.*;
-import com.system.morapack.schemas.AirportSchema;
 import com.system.morapack.config.Constants;
-import com.system.morapack.schemas.OrderSchema;
 import com.system.morapack.schemas.algorithm.Input.InputAirports;
 import com.system.morapack.schemas.algorithm.Input.InputData;
 import com.system.morapack.schemas.algorithm.Input.InputProducts;
@@ -127,6 +125,21 @@ public class Solution {
      */
     @Deprecated
     public Solution() {
+        System.out.println("========================================");
+        System.out.println("ALNS SOLUTION - LEGACY MODE (NO TIME FILTERING)");
+        System.out.println("WARNING: Loading ALL orders from data source");
+        System.out.println("========================================");
+
+        this.simulationStartTime = null;
+        this.simulationEndTime = null;
+
+        initializeSolution(null, null);
+    }
+
+    /**
+     * Common initialization logic for both constructors
+     */
+    private void initializeSolution(LocalDateTime simStart, LocalDateTime simEnd) {
         // ========== MODULAR DATA SOURCE ==========
         // Create data source based on Constants.DATA_SOURCE_MODE
         // Supports FILE (data/ directory) and DATABASE (PostgreSQL) modes
@@ -142,14 +155,22 @@ public class Solution {
         // Load data from selected source (FILE or DATABASE)
         this.airportSchemas = dataSource.loadAirports();
         this.flightSchemas = dataSource.loadFlights(this.airportSchemas);
-        this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
+
+        // Load orders with or without time filtering
+        if (simStart != null && simEnd != null) {
+            System.out.println("Loading orders with time window filtering...");
+            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas, simStart, simEnd);
+        } else {
+            System.out.println("Loading ALL orders (no time filtering)...");
+            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
+        }
 
         // Keep references to old file-based readers for backward compatibility
         // (these will be null when using DATABASE mode, but not accessed)
         this.inputAirports = null;
         this.inputData = null;
         this.inputProducts = null;
-        
+
         // PATCH: Aplicar unitización si está habilitada
         if (ENABLE_PRODUCT_UNITIZATION) {
             this.orderSchemas = expandPackagesToProductUnits(this.originalOrderSchemas);
@@ -159,17 +180,21 @@ public class Solution {
             this.orderSchemas = new ArrayList<>(this.originalOrderSchemas);
             System.out.println("UNITIZACIÓN DESHABILITADA: Usando paquetes originales");
         }
-        
+
         this.warehouseOccupancy = new HashMap<>();
         this.temporalWarehouseOccupancy = new HashMap<>();
-        
+
+        // NEW: Initialize order splits tracking
+        this.orderSplits = new HashMap<>();
+        System.out.println("Order splits tracking initialized (for batch persistence)");
+
         // CHANGED: Inicializar cache robusta y T0
         initializeCityToAirportCache();
         initializeT0();
-        
+
         // Inicializar generador de números aleatorios con semilla basada en tiempo actual
         this.random = new Random(System.currentTimeMillis());
-        
+
         // Inicializar operadores ALNS
         this.destructionOperators = new ALNSDestruction();
         this.repairOperators = new ALNSRepair(airportSchemas, flightSchemas, warehouseOccupancy);
@@ -185,9 +210,35 @@ public class Solution {
         // Inicializar parámetros ALNS
         initializeALNSParameters();
 
-        // Inicializar ocupación de almacenes
+        // Inicializar ocupación de almacenes y vuelos (base)
         initializeWarehouseOccupancy();
         initializeTemporalWarehouseOccupancy();
+
+        // NEW: Load existing product assignments from DB (for incremental scheduling)
+        if (simStart != null && simEnd != null) {
+            System.out.println("\n=== LOADING EXISTING DB STATE FOR INCREMENTAL SCHEDULING ===");
+            try {
+                Map<String, List<ProductSchema>> existingAssignments =
+                    dataSource.loadExistingProductAssignments(simStart, simEnd);
+
+                if (existingAssignments != null && !existingAssignments.isEmpty()) {
+                    // Initialize flight capacities from existing assignments
+                    initializeFlightCapacitiesFromDB(existingAssignments);
+
+                    // Initialize warehouse occupancy from existing assignments
+                    initializeWarehouseOccupancyFromDB(existingAssignments);
+
+                    System.out.println("DB state loaded successfully - algorithm will skip already-assigned products");
+                } else {
+                    System.out.println("No existing assignments found - fresh run");
+                }
+            } catch (Exception e) {
+                System.err.println("WARNING: Failed to load existing DB state: " + e.getMessage());
+                System.err.println("Continuing with fresh run (no incremental scheduling)");
+                e.printStackTrace();
+            }
+            System.out.println("=============================================================\n");
+        }
     }
     
     /**
@@ -1437,6 +1488,12 @@ public class Solution {
             if (destinationAirportSchema == null || destinationAirportSchema.getWarehouse() == null) {
                 return false;
             }
+
+            // FIXED: Exempt main warehouses (unlimited capacity)
+            if (isMainWarehouse(destinationAirportSchema)) {
+                return true; // Main warehouses have unlimited capacity
+            }
+
             int productCount = pkg.getProductSchemas() != null ? pkg.getProductSchemas().size() : 1;
             int currentOccupancy = warehouseOccupancy.getOrDefault(destinationAirportSchema, 0);
             int maxCapacity = destinationAirportSchema.getWarehouse().getMaxCapacity();
@@ -1457,7 +1514,9 @@ public class Solution {
                 }
                 return false;
             }
-
+            if (isMainWarehouse(arrivalAirport)) {
+                continue; // Skip capacity check for main warehouses
+            }
             // Validar capacidad de este almacén
             int currentOccupancy = warehouseOccupancy.getOrDefault(arrivalAirport, 0);
             int maxCapacity = arrivalAirport.getWarehouse().getMaxCapacity();
@@ -1882,22 +1941,30 @@ public class Solution {
                 if (bestRoute != null && isRouteValid(pkg, bestRoute)) {
                     // Primero validar temporalmente sin actualizar capacidades
                     if (canAssignWithSpaceOptimization(pkg, bestRoute, currentSolution)) {
-                        // Si la validación temporal pasa, entonces actualizar capacidades
-                        currentSolution.put(pkg, bestRoute);
-                        assignedPackages++;
-                        iterationAssigned++;
-                        
-                        // Actualizar capacidades DESPUÉS de la validación
-                        updateFlightCapacities(bestRoute, productCount);
-                        incrementWarehouseOccupancy(destinationAirportSchema, productCount);
+                      // Si la validación temporal pasa, entonces actualizar capacidades
+                      currentSolution.put(pkg, bestRoute);
+                      assignedPackages++;
+                      iterationAssigned++;
 
-                        // NEW: Track this assignment for batch persistence
-                        trackOrderAssignment(pkg.getName(), productCount, bestRoute);
+                      // Actualizar capacidades DESPUÉS de la validación
+                      updateFlightCapacities(bestRoute, productCount);
+                      incrementWarehouseOccupancy(destinationAirportSchema, productCount);
 
-                        if (iteration > 0) {
-                            System.out.println("  Reasignado paquete " + pkg.getId() + " en iteración " + iteration);
-                        }
+                      // NEW: Track this assignment for batch persistence
+                      trackOrderAssignment(pkg.getName(), productCount, bestRoute);
+
+                      if (iteration > 0) {
+                        System.out.println("  Reasignado paquete " + pkg.getId() + " en iteración " + iteration);
+                      }
                     }
+                  } else {
+                    // NEW: Order doesn't fit - attempt to split it
+                    if (attemptOrderSplit(pkg, bestRoute, currentSolution)) {
+                        // At least one split was assigned (tracked internally)
+                        iterationAssigned++;
+                        System.out.println("  Order " + pkg.getId() + " split and partially assigned");
+                    }
+
                 }
             }
             
@@ -2827,6 +2894,162 @@ public class Solution {
             warehouseOccupancy.put(airportSchema, 0);
         }
     }
+
+    /**
+     * NEW: Initialize flight capacities from existing DB assignments (for incremental scheduling)
+     * Reads products already assigned to flights and updates usedCapacity accordingly
+     *
+     * @param existingAssignments Map of FlightInstance ID -> List of assigned products
+     */
+    private void initializeFlightCapacitiesFromDB(Map<String, List<ProductSchema>> existingAssignments) {
+        if (existingAssignments == null || existingAssignments.isEmpty()) {
+            System.out.println("No existing flight assignments to initialize");
+            return;
+        }
+
+        int totalProductsLoaded = 0;
+        int flightsUpdated = 0;
+
+        // For each flight instance with existing assignments
+        for (Map.Entry<String, List<ProductSchema>> entry : existingAssignments.entrySet()) {
+            String flightInstanceId = entry.getKey();
+            List<ProductSchema> assignedProducts = entry.getValue();
+
+            if (assignedProducts == null || assignedProducts.isEmpty()) {
+                continue;
+            }
+
+            // Parse flight instance ID: "FL-45-DAY-0-2000" -> flight code "FL-45"
+            String flightCode = parseFlightCodeFromInstance(flightInstanceId);
+            if (flightCode == null) {
+                continue;
+            }
+
+            // Find corresponding FlightSchema
+            FlightSchema flight = findFlightByCode(flightCode);
+            if (flight == null) {
+                if (Constants.VERBOSE_LOGGING) {
+                    System.out.println("WARNING: Flight " + flightCode + " not found in flight schemas");
+                }
+                continue;
+            }
+
+            // Update used capacity
+            int productsOnFlight = assignedProducts.size();
+            flight.setUsedCapacity(flight.getUsedCapacity() + productsOnFlight);
+            totalProductsLoaded += productsOnFlight;
+            flightsUpdated++;
+
+            if (Constants.VERBOSE_LOGGING) {
+                System.out.println("Loaded " + productsOnFlight + " products on flight " + flightCode +
+                                 " (capacity: " + flight.getUsedCapacity() + "/" + flight.getMaxCapacity() + ")");
+            }
+        }
+
+        System.out.println("Initialized flight capacities: " + flightsUpdated + " flights, " +
+                         totalProductsLoaded + " products loaded from DB");
+    }
+
+    /**
+     * NEW: Initialize warehouse occupancy from existing DB assignments (for incremental scheduling)
+     * Counts products currently at each warehouse (arrived but not yet delivered)
+     *
+     * @param existingAssignments Map of FlightInstance ID -> List of assigned products
+     */
+    private void initializeWarehouseOccupancyFromDB(Map<String, List<ProductSchema>> existingAssignments) {
+        if (existingAssignments == null || existingAssignments.isEmpty()) {
+            System.out.println("No existing warehouse occupancy to initialize");
+            return;
+        }
+
+        int totalProductsInWarehouses = 0;
+
+        // Count products that have ARRIVED at warehouses (status = ARRIVED)
+        for (Map.Entry<String, List<ProductSchema>> entry : existingAssignments.entrySet()) {
+            List<ProductSchema> products = entry.getValue();
+
+            if (products == null) {
+                continue;
+            }
+
+            for (ProductSchema product : products) {
+                // Only count products that are physically at warehouses (not in-transit)
+                if (product.getStatus() == Status.ARRIVED) {
+                    // Get destination airport for this product
+                    if (product.getOrderId() != null) {
+                        // Find the order to get destination
+                        OrderSchema order = findOrderById(product.getOrderId());
+                        if (order != null && order.getDestinationCitySchema() != null) {
+                            AirportSchema destinationAirport = getAirportByCity(order.getDestinationCitySchema());
+                            if (destinationAirport != null) {
+                                // Increment warehouse occupancy
+                                int currentOccupancy = warehouseOccupancy.getOrDefault(destinationAirport, 0);
+                                warehouseOccupancy.put(destinationAirport, currentOccupancy + 1);
+                                totalProductsInWarehouses++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println("Initialized warehouse occupancy: " + totalProductsInWarehouses + " products in warehouses");
+
+        if (Constants.VERBOSE_LOGGING) {
+            for (Map.Entry<AirportSchema, Integer> entry : warehouseOccupancy.entrySet()) {
+                if (entry.getValue() > 0) {
+                    System.out.println("  " + entry.getKey().getCitySchema().getName() + ": " +
+                                     entry.getValue() + " products");
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper: Parse flight code from flight instance ID
+     * Example: "FL-45-DAY-0-2000" -> "FL-45"
+     */
+    private String parseFlightCodeFromInstance(String flightInstanceId) {
+        if (flightInstanceId == null || !flightInstanceId.contains("-DAY-")) {
+            return null;
+        }
+
+        // Split by "-DAY-" and take the first part
+        String[] parts = flightInstanceId.split("-DAY-");
+        return parts.length > 0 ? parts[0] : null;
+    }
+
+    /**
+     * Helper: Find FlightSchema by flight code
+     */
+    private FlightSchema findFlightByCode(String flightCode) {
+        if (flightCode == null || flightSchemas == null) {
+            return null;
+        }
+
+        for (FlightSchema flight : flightSchemas) {
+            if (flightCode.equals(flight.getCode())) {
+                return flight;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Helper: Find OrderSchema by order ID
+     */
+    private OrderSchema findOrderById(Integer orderId) {
+        if (orderId == null || orderSchemas == null) {
+            return null;
+        }
+
+        for (OrderSchema order : orderSchemas) {
+            if (orderId.equals(order.getId())) {
+                return order;
+            }
+        }
+        return null;
+    }
     
     /**
      * Inicializa la matriz temporal de ocupación de almacenes.
@@ -2994,10 +3217,36 @@ public class Solution {
         
         return true;
     }
-    
+        
+    /**
+     * Check if an airport is a main MoraPack warehouse with unlimited capacity
+     * Main warehouses: Lima, Brussels (Bruselas), Baku
+     *
+     * @param airportSchema Airport to check
+     * @return true if it's a main warehouse with unlimited capacity
+     */
+    private boolean isMainWarehouse(AirportSchema airportSchema) {
+        if (airportSchema == null || airportSchema.getCitySchema() == null) {
+            return false;
+        }
+
+        String cityName = airportSchema.getCitySchema().getName();
+        if (cityName == null) {
+            return false;
+        }
+
+        // Check for main warehouse cities (case-insensitive)
+        String cityLower = cityName.toLowerCase();
+        return cityLower.contains("lima") ||
+               cityLower.contains("brusel") ||  // Brussels/Bruselas
+               cityLower.contains("baku");
+    }
+
     /**
      * Agrega ocupación temporal a un aeropuerto durante un período de tiempo.
-     * 
+     *      *
+     * IMPORTANT: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
+
      * @param airportSchema aeropuerto donde agregar ocupación
      * @param startMinute minuto de inicio (0-1439)
      * @param durationMinutes duración en minutos
@@ -3008,7 +3257,21 @@ public class Solution {
         if (airportSchema == null || airportSchema.getWarehouse() == null) {
             return false;
         }
-        
+                // CRITICAL: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
+        if (isMainWarehouse(airportSchema)) {
+            // Just track occupancy for statistics, but don't enforce limit
+            int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
+            final int TOTAL_MINUTES = HORIZON_DAYS * 24 * 60;
+            int clampedStart = Math.max(0, Math.min(startMinute, TOTAL_MINUTES - 1));
+            int clampedEnd = Math.max(0, Math.min(startMinute + durationMinutes, TOTAL_MINUTES));
+            for (int minute = clampedStart; minute < clampedEnd; minute++) {
+                occupancyArray[minute] += productCount;
+            }
+            return true; // Always allow - unlimited capacity
+        }
+
+        // For non-main warehouses, enforce capacity limits
+
         int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
         int maxCapacity = airportSchema.getWarehouse().getMaxCapacity();
         
