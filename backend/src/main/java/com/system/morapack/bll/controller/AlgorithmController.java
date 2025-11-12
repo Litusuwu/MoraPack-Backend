@@ -1,6 +1,5 @@
 package com.system.morapack.bll.controller;
 
-import com.system.morapack.bll.service.AlgorithmPersistenceService;
 import com.system.morapack.config.Constants;
 import com.system.morapack.schemas.*;
 import com.system.morapack.schemas.algorithm.ALNS.Solution;
@@ -16,9 +15,6 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class AlgorithmController {
-
-  // NEW: Persistence service for batch DB operations
-  private final AlgorithmPersistenceService persistenceService;
 
   /**
    * Helper class to group flights by route
@@ -428,22 +424,33 @@ public class AlgorithmController {
     try {
       // Set data source mode if specified
       if (request.getUseDatabase() != null) {
+        // This would require modifying Constants or passing to algorithm constructors
         System.out.println("Using data source: " + (request.getUseDatabase() ? "DATABASE" : "FILE"));
       }
 
-      System.out.println("WARNING: Using legacy executeAlgorithm method");
-      System.out.println("Consider using executeDailyScenario or executeWeeklyScenario instead");
+      String algorithmType = request.getAlgorithmType() != null ?
+          request.getAlgorithmType().toUpperCase() : "TABU";
 
-      // Default to ALNS
-      AlgorithmResultSchema result = executeALNS(request, startTime);
+      AlgorithmResultSchema result;
+
+      switch (algorithmType) {
+        case "ALNS":
+          result = executeALNS(request, startTime);
+          break;
+        case "TABU":
+        default:
+          result = executeTabuSearch(request, startTime);
+          break;
+      }
+
       return result;
 
     } catch (Exception e) {
       LocalDateTime endTime = LocalDateTime.now();
-      e.printStackTrace();
       return AlgorithmResultSchema.builder()
           .success(false)
           .message("Algorithm execution failed: " + e.getMessage())
+          .algorithmType(request.getAlgorithmType())
           .executionStartTime(startTime)
           .executionEndTime(endTime)
           .executionTimeSeconds(ChronoUnit.SECONDS.between(startTime, endTime))
@@ -480,98 +487,15 @@ public class AlgorithmController {
   }
 
   /**
-   * Convert ALNS product-level solution to AlgorithmResultSchema (with simulation time)
-   * This is the preferred method for daily/weekly scenarios
+   * Convert ALNS product-level solution to AlgorithmResultSchema
    */
-  private AlgorithmResultSchema convertALNSSolutionToResult(
-      Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
-      LocalDateTime executionStartTime,
-      LocalDateTime executionEndTime,
-      long executionTime,
-      LocalDateTime simulationStartTime,
-      LocalDateTime simulationEndTime) {
-
-    System.out.println("\n=== CONVERTING ALNS SOLUTION TO RESULT (with simulation time) ===");
-    System.out.println("Products in solution: " + (productSolution != null ? productSolution.size() : "NULL"));
-    System.out.println("Simulation window: " + simulationStartTime + " to " + simulationEndTime);
-    System.out.println("NOTE: productRoutes NOT included (frontend queries DB directly)");
-
-    int assignedProductsCount = 0;
-    int unassignedProductsCount = 0;
-    Set<Integer> assignedOrders = new HashSet<>();
-
-    if (productSolution == null || productSolution.isEmpty()) {
-      System.out.println("WARNING: productSolution is empty or null");
-      return AlgorithmResultSchema.builder()
-          .success(true)
-          .message("ALNS algorithm executed but no products were assigned")
-          .executionStartTime(executionStartTime)
-          .executionEndTime(executionEndTime)
-          .executionTimeSeconds(executionTime)
-          .simulationStartTime(simulationStartTime)
-          .simulationEndTime(simulationEndTime)
-          .totalOrders(0)
-          .assignedOrders(0)
-          .unassignedOrders(0)
-          .totalProducts(0)
-          .assignedProducts(0)
-          .unassignedProducts(0)
-          .score(0.0)
-          .productRoutes(null)  // NULL - frontend uses query endpoints
-          .build();
-    }
-
-    // NEW: Count products and orders WITHOUT building productRoutes
-    // Frontend will query database directly via /api/query endpoints
-    for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
-      ProductSchema product = entry.getKey();
-      ArrayList<FlightSchema> flights = entry.getValue();
-
-      if (product != null && flights != null && !flights.isEmpty()) {
-        assignedProductsCount++;
-
-        // Track order
-        if (product.getOrderId() != null) {
-          assignedOrders.add(product.getOrderId());
-        }
-      }
-    }
-
-    System.out.println("Assigned products: " + assignedProductsCount);
-    System.out.println("Assigned orders: " + assignedOrders.size());
-    System.out.println("productRoutes: NULL (use query endpoints instead)");
-
-    return AlgorithmResultSchema.builder()
-        .success(true)
-        .message("ALNS algorithm executed successfully. Use /api/query endpoints to retrieve results.")
-        .executionStartTime(executionStartTime)
-        .executionEndTime(executionEndTime)
-        .executionTimeSeconds(executionTime)
-        .simulationStartTime(simulationStartTime)
-        .simulationEndTime(simulationEndTime)
-        .totalOrders(assignedOrders.size())
-        .assignedOrders(assignedOrders.size())
-        .unassignedOrders(0)  // TODO: Calculate properly
-        .totalProducts(assignedProductsCount)
-        .assignedProducts(assignedProductsCount)
-        .unassignedProducts(unassignedProductsCount)
-        .score(0.0)  // TODO: Calculate solution score
-        .productRoutes(null)  // NULL - frontend queries DB via /api/query endpoints
-        .build();
-  }
-
-  /**
-   * Convert ALNS product-level solution to AlgorithmResultSchema (LEGACY - no simulation time)
-   * @deprecated Use version with simulation time parameters
-   */
-  @Deprecated
   private AlgorithmResultSchema convertALNSSolutionToResult(
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
       LocalDateTime startTime,
       LocalDateTime endTime,
       long executionTime) {
 
-    System.out.println("\n=== CONVIRTIENDO SOLUCIÓN ALNS A RESULTADO (LEGACY) ===");
+    System.out.println("\n=== CONVIRTIENDO SOLUCIÓN ALNS A RESULTADO ===");
     System.out.println("Productos en solución: " + (productSolution != null ? productSolution.size() : "NULL"));
 
     List<ProductRouteDTO> productRoutes = new ArrayList<>();
@@ -584,6 +508,7 @@ public class AlgorithmController {
       return AlgorithmResultSchema.builder()
           .success(true)
           .message("ALNS algorithm executed but no products were assigned")
+          .algorithmType("ALNS")
           .executionStartTime(startTime)
           .executionEndTime(endTime)
           .executionTimeSeconds(executionTime)
@@ -591,8 +516,6 @@ public class AlgorithmController {
           .assignedOrders(0)
           .unassignedOrders(0)
           .totalProducts(0)
-          .assignedProducts(0)
-          .unassignedProducts(0)
           .score(0.0)
           .productRoutes(new ArrayList<>())
           .build();

@@ -6,7 +6,6 @@ import com.system.morapack.schemas.FlightInstanceSchema;
 import com.system.morapack.schemas.OrderSchema;
 import com.system.morapack.schemas.ProductSchema;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,28 +41,8 @@ public interface InputDataSource {
      *
      * @param airports List of airports to link products to (for location references)
      * @return List of OrderSchema objects with complete information (including ProductSchemas)
-     * @deprecated Use loadOrders(airports, simulationStartTime, simulationEndTime) instead
      */
-    @Deprecated
     ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports);
-
-    /**
-     * Loads orders/products from the data source within a specific time window
-     * This is the preferred method for daily and weekly scenarios
-     *
-     * @param airports List of airports to link products to (for location references)
-     * @param simulationStartTime Start of simulation time window (inclusive)
-     * @param simulationEndTime End of simulation time window (inclusive)
-     * @return List of OrderSchema objects created within the time window
-     */
-    default ArrayList<OrderSchema> loadOrders(ArrayList<AirportSchema> airports,
-                                              LocalDateTime simulationStartTime,
-                                              LocalDateTime simulationEndTime) {
-        // Default implementation: call legacy method (no filtering)
-        // Implementations should override this to support time window filtering
-        System.out.println("[WARNING] Time window filtering not implemented for " + getSourceName() + " data source");
-        return loadOrders(airports);
-    }
 
     /**
      * Returns the name of this data source for logging purposes

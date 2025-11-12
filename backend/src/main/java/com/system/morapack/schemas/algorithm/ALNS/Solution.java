@@ -127,21 +127,6 @@ public class Solution {
      */
     @Deprecated
     public Solution() {
-        System.out.println("========================================");
-        System.out.println("ALNS SOLUTION - LEGACY MODE (NO TIME FILTERING)");
-        System.out.println("WARNING: Loading ALL orders from data source");
-        System.out.println("========================================");
-
-        this.simulationStartTime = null;
-        this.simulationEndTime = null;
-
-        initializeSolution(null, null);
-    }
-
-    /**
-     * Common initialization logic for both constructors
-     */
-    private void initializeSolution(LocalDateTime simStart, LocalDateTime simEnd) {
         // ========== MODULAR DATA SOURCE ==========
         // Create data source based on Constants.DATA_SOURCE_MODE
         // Supports FILE (data/ directory) and DATABASE (PostgreSQL) modes
@@ -157,15 +142,7 @@ public class Solution {
         // Load data from selected source (FILE or DATABASE)
         this.airportSchemas = dataSource.loadAirports();
         this.flightSchemas = dataSource.loadFlights(this.airportSchemas);
-
-        // Load orders with or without time filtering
-        if (simStart != null && simEnd != null) {
-            System.out.println("Loading orders with time window filtering...");
-            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas, simStart, simEnd);
-        } else {
-            System.out.println("Loading ALL orders (no time filtering)...");
-            this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
-        }
+        this.originalOrderSchemas = dataSource.loadOrders(this.airportSchemas);
 
         // Keep references to old file-based readers for backward compatibility
         // (these will be null when using DATABASE mode, but not accessed)
@@ -185,11 +162,7 @@ public class Solution {
         
         this.warehouseOccupancy = new HashMap<>();
         this.temporalWarehouseOccupancy = new HashMap<>();
-
-        // NEW: Initialize order splits tracking
-        this.orderSplits = new HashMap<>();
-        System.out.println("Order splits tracking initialized (for batch persistence)");
-
+        
         // CHANGED: Inicializar cache robusta y T0
         initializeCityToAirportCache();
         initializeT0();
@@ -1464,12 +1437,6 @@ public class Solution {
             if (destinationAirportSchema == null || destinationAirportSchema.getWarehouse() == null) {
                 return false;
             }
-
-            // CRITICAL: Main warehouses (Lima, Brussels, Baku) have unlimited capacity
-            if (isMainWarehouse(destinationAirportSchema)) {
-                return true; // Always has capacity
-            }
-
             int productCount = pkg.getProductSchemas() != null ? pkg.getProductSchemas().size() : 1;
             int currentOccupancy = warehouseOccupancy.getOrDefault(destinationAirportSchema, 0);
             int maxCapacity = destinationAirportSchema.getWarehouse().getMaxCapacity();
@@ -1491,12 +1458,7 @@ public class Solution {
                 return false;
             }
 
-            // CRITICAL: Main warehouses (Lima, Brussels, Baku) have unlimited capacity
-            if (isMainWarehouse(arrivalAirport)) {
-                continue; // Skip capacity check for main warehouses
-            }
-
-            // Validar capacidad de este almacén (only for non-main warehouses)
+            // Validar capacidad de este almacén
             int currentOccupancy = warehouseOccupancy.getOrDefault(arrivalAirport, 0);
             int maxCapacity = arrivalAirport.getWarehouse().getMaxCapacity();
 
@@ -1924,7 +1886,7 @@ public class Solution {
                         currentSolution.put(pkg, bestRoute);
                         assignedPackages++;
                         iterationAssigned++;
-
+                        
                         // Actualizar capacidades DESPUÉS de la validación
                         updateFlightCapacities(bestRoute, productCount);
                         incrementWarehouseOccupancy(destinationAirportSchema, productCount);
@@ -1934,13 +1896,6 @@ public class Solution {
 
                         if (iteration > 0) {
                             System.out.println("  Reasignado paquete " + pkg.getId() + " en iteración " + iteration);
-                        }
-                    } else {
-                        // NEW: Order doesn't fit - attempt to split it
-                        if (attemptOrderSplit(pkg, bestRoute, currentSolution)) {
-                            // At least one split was assigned (tracked internally)
-                            iterationAssigned++;
-                            System.out.println("  Order " + pkg.getId() + " split and partially assigned");
                         }
                     }
                 }
@@ -3041,34 +2996,8 @@ public class Solution {
     }
     
     /**
-     * Check if an airport is a main MoraPack warehouse with unlimited capacity
-     * Main warehouses: Lima, Brussels (Bruselas), Baku
-     *
-     * @param airportSchema Airport to check
-     * @return true if it's a main warehouse with unlimited capacity
-     */
-    private boolean isMainWarehouse(AirportSchema airportSchema) {
-        if (airportSchema == null || airportSchema.getCitySchema() == null) {
-            return false;
-        }
-
-        String cityName = airportSchema.getCitySchema().getName();
-        if (cityName == null) {
-            return false;
-        }
-
-        // Check for main warehouse cities (case-insensitive)
-        String cityLower = cityName.toLowerCase();
-        return cityLower.contains("lima") ||
-               cityLower.contains("brusel") ||  // Brussels/Bruselas
-               cityLower.contains("baku");
-    }
-
-    /**
      * Agrega ocupación temporal a un aeropuerto durante un período de tiempo.
-     *
-     * IMPORTANT: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
-     *
+     * 
      * @param airportSchema aeropuerto donde agregar ocupación
      * @param startMinute minuto de inicio (0-1439)
      * @param durationMinutes duración en minutos
@@ -3079,24 +3008,10 @@ public class Solution {
         if (airportSchema == null || airportSchema.getWarehouse() == null) {
             return false;
         }
-
-        // CRITICAL: Main warehouses (Lima, Brussels, Baku) have UNLIMITED capacity
-        if (isMainWarehouse(airportSchema)) {
-            // Just track occupancy for statistics, but don't enforce limit
-            int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
-            final int TOTAL_MINUTES = HORIZON_DAYS * 24 * 60;
-            int clampedStart = Math.max(0, Math.min(startMinute, TOTAL_MINUTES - 1));
-            int clampedEnd = Math.max(0, Math.min(startMinute + durationMinutes, TOTAL_MINUTES));
-            for (int minute = clampedStart; minute < clampedEnd; minute++) {
-                occupancyArray[minute] += productCount;
-            }
-            return true; // Always allow - unlimited capacity
-        }
-
-        // For non-main warehouses, enforce capacity limits
+        
         int[] occupancyArray = temporalWarehouseOccupancy.get(airportSchema);
         int maxCapacity = airportSchema.getWarehouse().getMaxCapacity();
-
+        
         // CORRECCIÓN: Verificar y agregar ocupación para cada minuto del período (4 días)
         final int TOTAL_MINUTES = HORIZON_DAYS * 24 * 60;
         int clampedStart = Math.max(0, Math.min(startMinute, TOTAL_MINUTES - 1));
@@ -3107,7 +3022,7 @@ public class Solution {
                 return false; // Violación de capacidad
             }
         }
-
+        
         return true;
     }
     

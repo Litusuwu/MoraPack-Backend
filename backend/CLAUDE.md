@@ -13,11 +13,11 @@ MoraPack is a package distribution and routing optimization system for a company
 
 ### Key Business Rules
 
-- **Headquarters**: Lima (Peru), Brussels (Belgium), Baku (Azerbaijan) - **UNLIMITED stock AND warehouse capacity** ⚠️ CRITICAL
+- **Headquarters**: Lima (Peru), Brussels (Belgium), Baku (Azerbaijan) - unlimited stock
 - **Delivery deadlines**: 2 days max (same continent), 3 days max (different continent)
 - **PACK airline agreement**: 0.5 days transport (same continent), 1 day (different continent)
 - **Flight capacity**: 200-300 packages (same continent), 250-400 (different continent)
-- **Warehouse capacity**: 600-1000 packages per airport (EXCEPT main warehouses which are unlimited)
+- **Warehouse capacity**: 600-1000 packages per airport
 - **Customer pickup window**: 2 hours max at destination airport
 - **Minimum layover time**: 1 hour for products in transit at intermediate destinations
 - **Products within an order** can arrive at different times, as long as all meet the deadline
@@ -127,7 +127,7 @@ src/main/java/com/system/morapack/
 2. **Algorithm Core** (`src/main/java/com/system/morapack/schemas/algorithm/`):
    - Two independent metaheuristic implementations (ALNS and TabuSearch)
    - Both solve the same routing optimization problem
-   - Input data from `data/` directory: `airportInfo.txt`, `flights.txt`, `_pedidos_{AIRPORT}_` files
+   - Input data from `data/` directory: `airportInfo.txt`, `flights.txt`, `products.txt`
 
 3. **Product Unitization** (Feature Toggle):
    - Controlled by `Constants.ENABLE_PRODUCT_UNITIZATION`
@@ -138,33 +138,6 @@ src/main/java/com/system/morapack/
    - Provides endpoints for frontend to track orders, flights, and status
    - Updates database with real-time changes
    - Intended to support three operational scenarios
-
-5. **Optimized Algorithm Workflow** ✨ NEW:
-   ```
-   Frontend → Algorithm Endpoint (POST /api/algorithm/daily or /weekly)
-        ↓
-   Load Orders (time-filtered, NO products loaded)
-        ↓
-   ALNS Algorithm Execution (orders tracked in memory)
-        ↓
-   Order Splitting (when capacity constraints apply, track splits in OrderSplit[])
-        ↓
-   Batch Persistence (single DB transaction at algorithm end)
-        ↓
-   Frontend Query Endpoints (GET current state from DB)
-   ```
-
-   **Key Optimizations:**
-   - **No product loading in input**: Products are created only at algorithm end when orders are split
-   - **In-memory order tracking**: When an order (e.g., 45 products) doesn't fit, split in half and track splits in array
-   - **Batch DB inserts**: All products persisted in single transaction after algorithm completes
-   - **Main warehouse unlimited capacity**: Lima, Brussels, Baku have no capacity limits (game changer)
-   - **Frontend queries DB**: No `productRoutes` in API response - frontend queries database directly
-
-6. **Data Source Abstraction** (`InputDataSource` interface):
-   - **FILE mode**: Read from `data/` directory (current default)
-   - **DATABASE mode**: Read from PostgreSQL via repositories (future use)
-   - Both support time window filtering for daily/weekly scenarios
 
 ## Critical Implementation Details
 
@@ -596,38 +569,10 @@ Priority order for implementation:
 
 ## Data Files
 
-Input data located in `backend/data/` directory:
-
-### Airport Information
-- **File:** `airportInfo.txt`
-- **Content:** Airport and warehouse capacity information
-
-### Flights
-- **File:** `flights.txt`
-- **Format:** `ORIGIN-DESTINATION-DEPARTURE-ARRIVAL-CAPACITY`
-- **Content:** Available flight routes and schedules
-
-### Orders (Updated Structure)
-- **Files:** `_pedidos_{AIRPORT_CODE}_` (one file per origin airport)
-- **Examples:** `_pedidos_LDZA_`, `_pedidos_SVMI_`, `_pedidos_SBBR_`
-- **Format:** `id_pedido-aaaammdd-hh-mm-dest-###-IdClien`
-- **Example:** `000000001-20250102-01-38-EBCI-006-0007729`
-
-**Field Description:**
-- `id_pedido`: Order identifier (unique per destination)
-- `aaaammdd`: Order creation date (YYYY-MM-DD format)
-  - Example: `20250102` = January 2, 2025
-- `hh`: Hour when order is created (00-23)
-- `mm`: Minute when order is created (00-59)
-- `dest`: Destination airport code (e.g., EBCI, SVMI, SBBR)
-- `###`: Product quantity as 3-digit string (001-999)
-- `IdClien`: Customer identifier as 7-digit number (0000001-9999999)
-
-**Important Notes:**
-- Each file represents orders originating from a specific airport
-- Orders include precise timestamp (date + time) for creation
-- The algorithm must filter orders based on simulation time window
-- File size: ~36MB total across all airport files (do not read all at once)
+Input data located in `data/` directory:
+- `airportInfo.txt` - Airport and warehouse capacity information
+- `flights.txt` - Available flight routes and schedules
+- `products.txt` - Product/order specifications
 
 ## Technology Stack
 
