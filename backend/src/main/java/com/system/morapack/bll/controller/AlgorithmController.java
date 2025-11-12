@@ -258,10 +258,10 @@ public class AlgorithmController {
       int productsCreated = 0;
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
-        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE ===");
-        List<AlgorithmPersistenceService.OrderSplit> persistenceSplits = convertToOrderSplits(orderSplits);
-        productsCreated = persistenceService.persistSolution(persistenceSplits);
-        System.out.println("Persisted " + productsCreated + " product records");
+        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE WITH FLIGHT INSTANCES ===");
+        List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits = convertToOrderSplitsWithInstances(orderSplits);
+        productsCreated = persistenceService.persistSolutionWithInstances(persistenceSplits);
+        System.out.println("Persisted " + productsCreated + " product records with flight instances");
       } else {
         System.out.println("No order splits to persist");
       }
@@ -328,10 +328,10 @@ public class AlgorithmController {
       int productsCreated = 0;
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
-        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE ===");
-        List<AlgorithmPersistenceService.OrderSplit> persistenceSplits = convertToOrderSplits(orderSplits);
-        productsCreated = persistenceService.persistSolution(persistenceSplits);
-        System.out.println("Persisted " + productsCreated + " product records");
+        System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE WITH FLIGHT INSTANCES ===");
+        List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits = convertToOrderSplitsWithInstances(orderSplits);
+        productsCreated = persistenceService.persistSolutionWithInstances(persistenceSplits);
+        System.out.println("Persisted " + productsCreated + " product records with flight instances");
       } else {
         System.out.println("No order splits to persist");
       }
@@ -368,7 +368,9 @@ public class AlgorithmController {
   /**
    * NEW: Convert Solution's OrderSplitInfo to AlgorithmPersistenceService's OrderSplit
    * Enables batch persistence of order splits to database
+   * @deprecated Use convertToOrderSplitsWithInstances() instead (includes flight instances)
    */
+  @Deprecated
   private List<AlgorithmPersistenceService.OrderSplit> convertToOrderSplits(
       Map<String, List<Solution.OrderSplitInfo>> orderSplitsMap) {
 
@@ -384,6 +386,33 @@ public class AlgorithmController {
                 orderName,
                 splitInfo.quantity,
                 splitInfo.assignedRoute
+            );
+        splits.add(split);
+      }
+    }
+
+    return splits;
+  }
+
+  /**
+   * Convert Solution's OrderSplitInfo to OrderSplitWithInstances
+   * Includes flight instances with departure times for state simulation
+   */
+  private List<AlgorithmPersistenceService.OrderSplitWithInstances> convertToOrderSplitsWithInstances(
+      Map<String, List<Solution.OrderSplitInfo>> orderSplitsMap) {
+
+    List<AlgorithmPersistenceService.OrderSplitWithInstances> splits = new ArrayList<>();
+
+    for (Map.Entry<String, List<Solution.OrderSplitInfo>> entry : orderSplitsMap.entrySet()) {
+      String orderName = entry.getKey();
+      List<Solution.OrderSplitInfo> splitInfos = entry.getValue();
+
+      for (Solution.OrderSplitInfo splitInfo : splitInfos) {
+        AlgorithmPersistenceService.OrderSplitWithInstances split =
+            new AlgorithmPersistenceService.OrderSplitWithInstances(
+                orderName,
+                splitInfo.quantity,
+                splitInfo.assignedFlightInstances
             );
         splits.add(split);
       }

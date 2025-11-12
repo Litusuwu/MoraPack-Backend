@@ -92,10 +92,18 @@ public class Solution {
     public static class OrderSplitInfo {
         public Integer quantity;
         public ArrayList<FlightSchema> assignedRoute;
+        public ArrayList<FlightInstanceSchema> assignedFlightInstances;
 
         public OrderSplitInfo(Integer quantity, ArrayList<FlightSchema> route) {
             this.quantity = quantity;
             this.assignedRoute = route;
+            this.assignedFlightInstances = new ArrayList<>();
+        }
+
+        public OrderSplitInfo(Integer quantity, ArrayList<FlightSchema> route, ArrayList<FlightInstanceSchema> instances) {
+            this.quantity = quantity;
+            this.assignedRoute = route;
+            this.assignedFlightInstances = instances;
         }
     }
 
@@ -411,6 +419,93 @@ public class Solution {
     }
 
     /**
+     * Generate flight instances for a route
+     * Creates specific flight departures with timestamps for each hop in the route
+     *
+     * @param route List of flights in the route
+     * @param orderCreationTime When the order was created (used as starting point)
+     * @return List of flight instances with departure times
+     */
+    private ArrayList<FlightInstanceSchema> generateFlightInstances(ArrayList<FlightSchema> route, LocalDateTime orderCreationTime) {
+        ArrayList<FlightInstanceSchema> instances = new ArrayList<>();
+
+        if (route == null || route.isEmpty()) {
+            return instances;
+        }
+
+        // Start from order creation time
+        LocalDateTime currentTime = orderCreationTime;
+        int dayCounter = 0;
+
+        for (int i = 0; i < route.size(); i++) {
+            FlightSchema flight = route.get(i);
+
+            // Calculate the next available departure after current time
+            // Assume flights depart every 24/dailyFrequency hours
+            Integer dailyFrequency = flight.getDailyFrequency();
+            if (dailyFrequency == null || dailyFrequency <= 0) {
+                dailyFrequency = 1; // Default to once per day
+            }
+
+            double hoursPerFlight = 24.0 / dailyFrequency;
+
+            // Find next departure slot
+            // For simplicity, use hour 0, 6, 12, 18 for frequency 4, etc.
+            int departureHour = 0;
+            if (dailyFrequency > 1) {
+                departureHour = ((int) (currentTime.getHour() / hoursPerFlight) + 1) * (int) hoursPerFlight;
+                if (departureHour >= 24) {
+                    departureHour = 0;
+                    dayCounter++;
+                }
+            }
+
+            // Calculate departure and arrival times
+            LocalDateTime departureTime = orderCreationTime.plusDays(dayCounter)
+                .withHour(departureHour).withMinute(0).withSecond(0);
+
+            // Handle null transport time
+            Double transportTimeDays = flight.getTransportTimeDays();
+            if (transportTimeDays == null || transportTimeDays <= 0) {
+                transportTimeDays = 0.5; // Default to 12 hours
+            }
+
+            long transportHours = (long) (transportTimeDays * 24);
+            LocalDateTime arrivalTime = departureTime.plusHours(transportHours);
+
+            // Handle null max capacity
+            Integer maxCapacity = flight.getMaxCapacity();
+            if (maxCapacity == null || maxCapacity <= 0) {
+                maxCapacity = 300; // Default capacity
+            }
+
+            // Create flight instance
+            FlightInstanceSchema instance = FlightInstanceSchema.builder()
+                .baseFlightId(flight.getId())
+                .baseFlight(flight)
+                .departureDateTime(departureTime)
+                .arrivalDateTime(arrivalTime)
+                .instanceDay(dayCounter)
+                .maxCapacity(maxCapacity)
+                .usedCapacity(0)
+                .build();
+
+            // Generate instance ID
+            instance.generateInstanceId();
+
+            instances.add(instance);
+
+            // Advance time for next leg: arrival + 1 hour minimum layover
+            currentTime = arrivalTime.plusHours(1);
+
+            // Update day counter based on new time
+            dayCounter = (int) ChronoUnit.DAYS.between(orderCreationTime.toLocalDate(), currentTime.toLocalDate());
+        }
+
+        return instances;
+    }
+
+    /**
      * Track an order assignment or split
      * Called when an order (or part of it) is assigned to a route
      */
@@ -418,10 +513,30 @@ public class Solution {
         if (!orderSplits.containsKey(orderName)) {
             orderSplits.put(orderName, new ArrayList<>());
         }
-        orderSplits.get(orderName).add(new OrderSplitInfo(quantity, route));
+
+        // Find the order to get its creation time
+        OrderSchema order = null;
+        for (OrderSchema o : orderSchemas) {
+            if (o.getName().equals(orderName)) {
+                order = o;
+                break;
+            }
+        }
+
+        // Generate flight instances with timestamps
+        ArrayList<FlightInstanceSchema> instances = new ArrayList<>();
+        if (order != null && route != null && !route.isEmpty()) {
+            LocalDateTime orderTime = order.getOrderDate();
+            if (orderTime == null) {
+                orderTime = simulationStartTime; // Fallback to simulation start
+            }
+            instances = generateFlightInstances(route, orderTime);
+        }
+
+        orderSplits.get(orderName).add(new OrderSplitInfo(quantity, route, instances));
 
         if (Constants.VERBOSE_LOGGING) {
-            System.out.println("Tracked assignment: Order " + orderName + " - " + quantity + " items on route");
+            System.out.println("Tracked assignment: Order " + orderName + " - " + quantity + " items on " + instances.size() + " flight instances");
         }
     }
 
@@ -2974,7 +3089,7 @@ public class Solution {
 
             for (ProductSchema product : products) {
                 // Only count products that are physically at warehouses (not in-transit)
-                if (product.getStatus() == Status.ARRIVED) {
+                if (product.getStatus() == Status.ASSIGNED) {
                     // Get destination airport for this product
                     if (product.getOrderId() != null) {
                         // Find the order to get destination
