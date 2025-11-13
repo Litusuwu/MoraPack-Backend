@@ -101,6 +101,7 @@ public class AuthController {
           .userId(user.getId())
           .userName(user.getName())
           .userLastName(user.getLastName())
+          .email(account.getEmail())
           .userType(user.getUserType())
           .loginTime(LocalDateTime.now())
           .lastActivity(LocalDateTime.now())
