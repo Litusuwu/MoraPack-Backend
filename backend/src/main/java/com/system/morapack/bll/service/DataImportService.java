@@ -19,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.io.File;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
@@ -511,10 +512,14 @@ public class DataImportService {
                     String id = p[0];
                     String airportCode = p[4];
                     int qty;
+                    int hour;
+                    int minute;
                     double pickupHour;
                     try {
                         qty = Integer.parseInt(p[5]);
-                        pickupHour = Double.parseDouble(p[2]);
+                        hour = Integer.parseInt(p[2]);
+                        minute = Integer.parseInt(p[3]);
+                        pickupHour = 2.0; // 2-hour pickup window
                     } catch (NumberFormatException ex) {
                         continue;
                     }
@@ -522,6 +527,9 @@ public class DataImportService {
                     Airport destAirport = airportByCode.get(airportCode);
                     if (destAirport == null || destAirport.getCity() == null) continue;
                     City destCity = destAirport.getCity();
+
+                    // Create creationDate from date + hour + minute
+                    LocalDateTime creationDate = LocalDateTime.of(date.getYear(), date.getMonth(), date.getDayOfMonth(), hour, minute);
 
                     Order order = Order.builder()
                             .name("ORDER-" + id)
@@ -531,6 +539,7 @@ public class DataImportService {
                             .status(PackageStatus.PENDING)
                             .origin(destCity)
                             .destination(destCity)
+                            .creationDate(creationDate)
                             .build();
                     orders.add(order);
                     ordersCount++;

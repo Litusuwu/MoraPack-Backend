@@ -74,6 +74,11 @@ public class FlightService {
     repository.deleteAllByIdIn(ids);
   }
 
+  public Flight getFlightByCode(String code) {
+    return repository.findByCode(code)
+        .orElse(null);
+  }
+
   // Queries
   public List<Flight> getByAirplane(Integer airplaneId) { return repository.findByAirplane_Id(airplaneId); }
   public List<Flight> getByOrigin(Integer originAirportId) { return repository.findByOriginAirport_Id(originAirportId); }
