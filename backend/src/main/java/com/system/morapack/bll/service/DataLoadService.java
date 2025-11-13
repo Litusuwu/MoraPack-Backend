@@ -40,6 +40,7 @@ public class DataLoadService {
     private final AirportService airportService;
     private final CustomerService customerService;
     private final UserService userService;
+    private final jakarta.persistence.EntityManager entityManager;
 
     // Cache for airport lookups (airport code -> Airport entity)
     private Map<String, Airport> airportCache = new HashMap<>();
@@ -273,16 +274,22 @@ public class DataLoadService {
             throw new IllegalStateException("Customer not found in cache: " + data.customerId);
         }
 
-        // Build Order entity
+        // CRITICAL FIX: Merge entities into current persistence context to avoid NonUniqueObjectException
+        // This ensures cached entities are properly managed by Hibernate in the current transaction
+        City managedOriginCity = entityManager.merge(originCity);
+        City managedDestinationCity = entityManager.merge(destinationCity);
+        Customer managedCustomer = entityManager.merge(customer);
+
+        // Build Order entity with managed entities
         return Order.builder()
             .name("Order-" + data.orderId + "-" + data.destinationAirportCode)
-            .origin(originCity)  // Now uses main warehouse city
-            .destination(destinationCity)
+            .origin(managedOriginCity)
+            .destination(managedDestinationCity)
             .deliveryDate(deliveryDeadline)
             .status(PackageStatus.PENDING)
             .pickupTimeHours(2.0)  // 2 hour pickup window
             .creationDate(data.orderDate)
-            .customer(customer)
+            .customer(managedCustomer)
             .build();
     }
 
