@@ -7,6 +7,11 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
 import jakarta.persistence.EntityManagerFactory;
+import com.system.morapack.dao.morapack_psql.repository.UserRepository;
+import com.system.morapack.dao.morapack_psql.repository.AccountRepository;
+import com.system.morapack.dao.morapack_psql.model.User;
+import com.system.morapack.dao.morapack_psql.model.Account;
+import com.system.morapack.schemas.TypeUser;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,6 +44,38 @@ public class DbSetupApplication {
         .run(args);
 
     ctx.getBean(EntityManagerFactory.class).createEntityManager().close();
+
+    // Insert a mock account for local development if it doesn't exist
+    try {
+      UserRepository userRepo = ctx.getBean(UserRepository.class);
+      AccountRepository accountRepo = ctx.getBean(AccountRepository.class);
+
+      String mockEmail = "monosupremo@gmail.com";
+      String mockPassword = "monosupremo123";
+
+      if (!accountRepo.existsByEmail(mockEmail)) {
+        User mockUser = User.builder()
+            .name("Mono")
+            .lastName("Supremo")
+            .userType(TypeUser.ADMIN)
+            .build();
+        mockUser = userRepo.save(mockUser);
+
+        Account mockAccount = Account.builder()
+            .email(mockEmail)
+            .password(mockPassword) // Note: stored in plain text in this demo app
+            .user(mockUser)
+            .build();
+        accountRepo.save(mockAccount);
+
+        System.out.println("Inserted mock account: " + mockEmail);
+      } else {
+        System.out.println("Mock account already exists: " + mockEmail);
+      }
+    } catch (Exception e) {
+      System.out.println("Could not insert mock account: " + e.getMessage());
+    }
+
     ctx.close();
   }
 

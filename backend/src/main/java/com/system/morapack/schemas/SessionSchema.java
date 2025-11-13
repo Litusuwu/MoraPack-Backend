@@ -13,6 +13,7 @@ public class SessionSchema {
     private Integer userId;
     private String userName;
     private String userLastName;
+    private String email;
     private TypeUser userType;
     private LocalDateTime loginTime;
     private LocalDateTime lastActivity;
