@@ -526,7 +526,8 @@ public class DataImportService {
                     Order order = Order.builder()
                             .name("ORDER-" + id)
                             .customer(defaultCustomer)
-                            .deliveryDate(date.atStartOfDay())
+                            .creationDate(date.atStartOfDay())              // <-- FIX
+                            .deliveryDate(date.plusDays(1).atStartOfDay())  // por ejemplo +1 día          // o la fecha que corresponda
                             .pickupTimeHours(pickupHour)
                             .status(PackageStatus.PENDING)
                             .origin(destCity)
