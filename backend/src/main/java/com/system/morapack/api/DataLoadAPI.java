@@ -127,6 +127,36 @@ public class DataLoadAPI {
     }
 
     /**
+     * Clear all orders and products from database
+     * Use this before loading fresh data to avoid duplicates
+     *
+     * Example: DELETE /api/data/clear-orders
+     */
+    @DeleteMapping("/clear-orders")
+    public ResponseEntity<Map<String, Object>> clearOrders() {
+        try {
+            System.out.println("========================================");
+            System.out.println("API: CLEAR ORDERS REQUEST RECEIVED");
+            System.out.println("========================================");
+
+            dataLoadService.clearAllOrders();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "All orders and products cleared successfully");
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to clear orders: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
      * Get default data directory path for order files
      */
     private String getDefaultDataDirectory() {
