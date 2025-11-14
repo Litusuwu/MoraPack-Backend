@@ -14,12 +14,14 @@ import java.util.Optional;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Integer> {
 
-  Optional<Order> findByName(String name);
+  Optional<Order> findFirstByName(String name);
+  List<Order> findByName(String name);
   List<Order> findByCustomer_Id(Integer customerId);
   List<Order> findByStatus(PackageStatus status);
   List<Order> findByDeliveryDateBetween(LocalDateTime start, LocalDateTime end);
   List<Order> findByIdIn(List<Integer> ids);
   boolean existsByName(String name);
+
   @Modifying
   @Query("DELETE FROM Order o WHERE o.id IN :ids")
   void deleteAllByIdIn(List<Integer> ids);

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 @Service
 @RequiredArgsConstructor
@@ -22,7 +23,7 @@ public class OrderService {
   }
 
   public Order getOrderByName(String name) {
-    return orderRepository.findByName(name)
+    return orderRepository.findFirstByName(name)
         .orElseThrow(() -> new EntityNotFoundException("Order not found with name: " + name));
   }
 
@@ -41,7 +42,22 @@ public class OrderService {
   }
 
   public List<Order> bulkCreateOrders(List<Order> orders) {
-    return orderRepository.saveAll(orders);
+    // Filter out orders that already exist
+    List<Order> uniqueOrders = new ArrayList<>();
+    for (Order order : orders) {
+      if (!orderRepository.existsByName(order.getName())) {
+        uniqueOrders.add(order);
+      }
+    }
+    
+    if (uniqueOrders.isEmpty()) {
+      System.out.println("WARNING: All orders already exist, skipping insert");
+      return new ArrayList<>();
+    }
+    
+    System.out.println("Inserting " + uniqueOrders.size() + " unique orders (filtered " + 
+                      (orders.size() - uniqueOrders.size()) + " duplicates)");
+    return orderRepository.saveAll(uniqueOrders);
   }
 
   public Order save(Order order) {
@@ -79,6 +95,11 @@ public class OrderService {
   @Transactional
   public void bulkDeleteOrders(List<Integer> ids) {
     orderRepository.deleteAllByIdIn(ids);
+  }
+
+  @Transactional
+  public void deleteAll() {
+    orderRepository.deleteAll();
   }
 
   public List<Order> getOrdersByDeliveryDateRange(LocalDateTime start, LocalDateTime end) {
