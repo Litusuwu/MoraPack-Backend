@@ -240,6 +240,16 @@ public class AlgorithmController {
       System.out.println("EXECUTING DAILY SCENARIO");
       System.out.println("===========================================");
 
+      // Extract simulation speed (default to 1x if not provided)
+      double simulationSpeed = request.getSimulationSpeed() != null ? 
+          request.getSimulationSpeed() : 1.0;
+      
+      System.out.println("Simulation Speed Multiplier: " + simulationSpeed + "x");
+      if (simulationSpeed != 1.0) {
+        System.out.println("Note: Frontend will advance simulation time at " + 
+            simulationSpeed + "x normal rate");
+      }
+
       // Calculate simulation window
       LocalDateTime simStart = request.getSimulationStartTime();
       LocalDateTime simEnd = calculateSimulationEndTime(request);
