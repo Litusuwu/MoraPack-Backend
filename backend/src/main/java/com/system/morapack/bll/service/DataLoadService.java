@@ -54,6 +54,28 @@ public class DataLoadService {
     private static final int JDBC_BATCH_SIZE = 2000;
 
     /**
+     * Clear all orders and their associated products from database
+     * Use this before loading fresh data to avoid duplicates
+     */
+    @Transactional
+    public void clearAllOrders() {
+        System.out.println("========================================");
+        System.out.println("CLEARING ALL ORDERS AND PRODUCTS");
+        System.out.println("========================================");
+
+        try {
+            // Delete all orders (cascade will delete products)
+            orderService.deleteAll();
+            
+            System.out.println("Successfully cleared all orders and products");
+            System.out.println("========================================");
+        } catch (Exception e) {
+            System.err.println("Error clearing orders: " + e.getMessage());
+            throw new RuntimeException("Failed to clear orders", e);
+        }
+    }
+
+    /**
      * Load orders from _pedidos_{AIRPORT}_ files into database
      *
      * @param dataDirectoryPath Path to data directory containing order files
@@ -281,8 +303,10 @@ public class DataLoadService {
         Customer managedCustomer = entityManager.merge(customer);
 
         // Build Order entity with managed entities
+        // FIX: Include origin airport code in name to ensure global uniqueness
+        // (orderIds are only unique within each origin airport file)
         return Order.builder()
-            .name("Order-" + data.orderId + "-" + data.destinationAirportCode)
+            .name("Order-" + data.originAirportCode + "-" + data.orderId + "-" + data.destinationAirportCode)
             .origin(managedOriginCity)
             .destination(managedDestinationCity)
             .deliveryDate(deliveryDeadline)

@@ -239,51 +239,105 @@ public class AlgorithmController {
       System.out.println("===========================================");
       System.out.println("EXECUTING DAILY SCENARIO");
       System.out.println("===========================================");
+      
+      // Log incoming request
+      System.out.println("REQUEST PARAMETERS:");
+      System.out.println("  simulationStartTime: " + request.getSimulationStartTime());
+      System.out.println("  simulationDurationHours: " + request.getSimulationDurationHours());
+      System.out.println("  useDatabase: " + request.getUseDatabase());
+      System.out.println("  simulationSpeed: " + request.getSimulationSpeed());
+
+      // Extract simulation speed (default to 1x if not provided)
+      double simulationSpeed = request.getSimulationSpeed() != null ? 
+          request.getSimulationSpeed() : 1.0;
+      
+      System.out.println("Simulation Speed Multiplier: " + simulationSpeed + "x");
+      if (simulationSpeed != 1.0) {
+        System.out.println("Note: Frontend will advance simulation time at " + 
+            simulationSpeed + "x normal rate");
+      }
 
       // Calculate simulation window
       LocalDateTime simStart = request.getSimulationStartTime();
       LocalDateTime simEnd = calculateSimulationEndTime(request);
 
       System.out.println("Simulation window: " + simStart + " to " + simEnd);
+      System.out.println("Window duration: " + java.time.temporal.ChronoUnit.HOURS.between(simStart, simEnd) + " hours");
 
       // Execute ALNS with time window
+      System.out.println("\n=== STARTING ALNS EXECUTION ===");
       Solution alnsSolution = new Solution(simStart, simEnd);
       alnsSolution.solve();
 
       LocalDateTime executionEndTime = LocalDateTime.now();
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
+      
+      System.out.println("\n=== ALNS EXECUTION COMPLETED ===");
+      System.out.println("Execution time: " + executionTime + " seconds (" + (executionTime / 60) + "m " + (executionTime % 60) + "s)");
 
       // NEW: Get order splits for batch persistence
       Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
       int productsCreated = 0;
+      Set<Integer> persistedOrderIds = new HashSet<>();
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
         System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE WITH FLIGHT INSTANCES ===");
         List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits = convertToOrderSplitsWithInstances(orderSplits);
         productsCreated = persistenceService.persistSolutionWithInstances(persistenceSplits);
         System.out.println("Persisted " + productsCreated + " product records with flight instances");
+        
+        // Track which orders were persisted (for final statistics)
+        persistedOrderIds.addAll(orderSplits.keySet().stream()
+            .map(key -> {
+              try {
+                return Integer.parseInt(key.replace("ORDER-", ""));
+              } catch (Exception e) {
+                return null;
+              }
+            })
+            .filter(id -> id != null)
+            .collect(java.util.stream.Collectors.toSet()));
       } else {
         System.out.println("No order splits to persist");
       }
 
-      // Get the product-level solution
+      // Get the product-level solution (may be empty if using orderSplits)
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
+      
+      System.out.println("\nDEBUG: productSolution size = " + (productSolution != null ? productSolution.size() : "NULL"));
+      System.out.println("DEBUG: productsCreated = " + productsCreated);
+      System.out.println("DEBUG: persistedOrderIds = " + persistedOrderIds.size());
 
       // Convert to result with simulation time info
       AlgorithmResultSchema result = convertALNSSolutionToResult(productSolution, executionStartTime,
                                                                   executionEndTime, executionTime,
-                                                                  simStart, simEnd);
+                                                                  simStart, simEnd, productsCreated, persistedOrderIds);
 
       // Update message with persistence info
       String message = "ALNS algorithm executed successfully. " +
                       "Products persisted: " + productsCreated;
       result.setMessage(message);
+      
+      // Log final statistics
+      System.out.println("\n=== FINAL STATISTICS ===");
+      System.out.println("Total orders: " + result.getTotalOrders());
+      System.out.println("Assigned orders: " + result.getAssignedOrders());
+      System.out.println("Unassigned orders: " + result.getUnassignedOrders());
+      System.out.println("Total products: " + result.getTotalProducts());
+      System.out.println("Assigned products: " + result.getAssignedProducts());
+      System.out.println("Unassigned products: " + result.getUnassignedProducts());
+      System.out.println("Score: " + result.getScore());
+      System.out.println("===========================================\n");
 
       return result;
 
     } catch (Exception e) {
       LocalDateTime executionEndTime = LocalDateTime.now();
+      System.out.println("\n!!! ALGORITHM EXECUTION FAILED !!!");
+      System.out.println("Error: " + e.getMessage());
       e.printStackTrace();
+      System.out.println("===========================================\n");
+      
       return AlgorithmResultSchema.builder()
           .success(false)
           .message("Daily scenario execution failed: " + e.getMessage())
@@ -521,6 +575,7 @@ public class AlgorithmController {
 
   /**
    * Convert ALNS product-level solution to AlgorithmResultSchema (with simulation time)
+   * Now accepts productsCreated count to handle orderSplits persistence
    */
   private AlgorithmResultSchema convertALNSSolutionToResult(
       Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
@@ -528,10 +583,14 @@ public class AlgorithmController {
       LocalDateTime executionEndTime,
       long executionTime,
       LocalDateTime simulationStartTime,
-      LocalDateTime simulationEndTime) {
+      LocalDateTime simulationEndTime,
+      int productsCreated,
+      Set<Integer> persistedOrderIds) {
 
     System.out.println("\n=== CONVERTING ALNS SOLUTION TO RESULT (with simulation time) ===");
-    System.out.println("Products in solution: " + (productSolution != null ? productSolution.size() : "NULL"));
+    System.out.println("Products in solution map: " + (productSolution != null ? productSolution.size() : "NULL"));
+    System.out.println("Products persisted to DB: " + productsCreated);
+    System.out.println("Orders persisted: " + persistedOrderIds.size());
     System.out.println("Simulation window: " + simulationStartTime + " to " + simulationEndTime);
     System.out.println("NOTE: productRoutes NOT included (frontend queries DB directly)");
 
@@ -539,45 +598,34 @@ public class AlgorithmController {
     int unassignedProductsCount = 0;
     Set<Integer> assignedOrders = new HashSet<>();
 
-    if (productSolution == null || productSolution.isEmpty()) {
-      System.out.println("WARNING: productSolution is empty or null");
-      return AlgorithmResultSchema.builder()
-          .success(true)
-          .message("ALNS algorithm executed but no products were assigned")
-          .executionStartTime(executionStartTime)
-          .executionEndTime(executionEndTime)
-          .executionTimeSeconds(executionTime)
-          .simulationStartTime(simulationStartTime)
-          .simulationEndTime(simulationEndTime)
-          .totalOrders(0)
-          .assignedOrders(0)
-          .unassignedOrders(0)
-          .totalProducts(0)
-          .assignedProducts(0)
-          .unassignedProducts(0)
-          .score(0.0)
-          .productRoutes(null)  // NULL - frontend uses query endpoints
-          .build();
-    }
+    // PRIMARY: Use persisted products count (more reliable for orderSplits)
+    if (productsCreated > 0) {
+      System.out.println("Using persisted products count: " + productsCreated);
+      assignedProductsCount = productsCreated;
+      assignedOrders.addAll(persistedOrderIds);
+    } else if (productSolution != null && !productSolution.isEmpty()) {
+      // FALLBACK: Use productSolution if no persisted products
+      System.out.println("Falling back to productSolution count: " + productSolution.size());
+      
+      for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
+        ProductSchema product = entry.getKey();
+        ArrayList<FlightSchema> flights = entry.getValue();
 
-    // NEW: Count products and orders WITHOUT building productRoutes
-    // Frontend will query database directly via /api/query endpoints
-    for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
-      ProductSchema product = entry.getKey();
-      ArrayList<FlightSchema> flights = entry.getValue();
+        if (product != null && flights != null && !flights.isEmpty()) {
+          assignedProductsCount++;
 
-      if (product != null && flights != null && !flights.isEmpty()) {
-        assignedProductsCount++;
-
-        // Track order
-        if (product.getOrderId() != null) {
-          assignedOrders.add(product.getOrderId());
+          // Track order
+          if (product.getOrderId() != null) {
+            assignedOrders.add(product.getOrderId());
+          }
         }
       }
+    } else {
+      System.out.println("WARNING: No products found in solution or persisted data");
     }
 
-    System.out.println("Assigned products: " + assignedProductsCount);
-    System.out.println("Assigned orders: " + assignedOrders.size());
+    System.out.println("Final assigned products: " + assignedProductsCount);
+    System.out.println("Final assigned orders: " + assignedOrders.size());
     System.out.println("productRoutes: NULL (use query endpoints instead)");
 
     return AlgorithmResultSchema.builder()
@@ -590,13 +638,38 @@ public class AlgorithmController {
         .simulationEndTime(simulationEndTime)
         .totalOrders(assignedOrders.size())
         .assignedOrders(assignedOrders.size())
-        .unassignedOrders(0)  // TODO: Calculate properly
+        .unassignedOrders(0)
         .totalProducts(assignedProductsCount)
         .assignedProducts(assignedProductsCount)
         .unassignedProducts(unassignedProductsCount)
-        .score(0.0)  // TODO: Calculate solution score
-        .productRoutes(null)  // NULL - frontend queries DB via /api/query endpoints
+        .score((double) assignedProductsCount)
+        .productRoutes(null)
         .build();
+  }
+  
+  /**
+   * Convert ALNS product-level solution to AlgorithmResultSchema (with simulation time)
+   * OLD SIGNATURE - kept for compatibility
+   * @deprecated Use version with productsCreated and persistedOrderIds
+   */
+  private AlgorithmResultSchema convertALNSSolutionToResult(
+      Map<ProductSchema, ArrayList<FlightSchema>> productSolution,
+      LocalDateTime executionStartTime,
+      LocalDateTime executionEndTime,
+      long executionTime,
+      LocalDateTime simulationStartTime,
+      LocalDateTime simulationEndTime) {
+
+    return convertALNSSolutionToResult(
+        productSolution, 
+        executionStartTime, 
+        executionEndTime, 
+        executionTime, 
+        simulationStartTime, 
+        simulationEndTime, 
+        0, 
+        new HashSet<>()
+    );
   }
 
   /**

@@ -22,6 +22,10 @@ public class AlgorithmRequest {
     private Integer maxIterations;
     private Double destructionRate;
 
+    // Simulation speed multiplier (1 = normal speed, 60 = 60x faster, etc.)
+    // Used to control how frequently events are generated/transmitted
+    private Double simulationSpeed;
+
     // Legacy fields for backward compatibility (deprecated)
     @Deprecated
     private String algorithmType; // No longer used - only ALNS is supported
