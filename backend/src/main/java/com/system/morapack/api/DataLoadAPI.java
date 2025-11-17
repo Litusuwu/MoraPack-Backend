@@ -2,6 +2,9 @@ package com.system.morapack.api;
 
 import com.system.morapack.bll.service.DataLoadService;
 import com.system.morapack.config.Constants;
+import com.system.morapack.dao.morapack_psql.repository.AirportRepository;
+import com.system.morapack.dao.morapack_psql.repository.FlightRepository;
+import com.system.morapack.dao.morapack_psql.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +28,9 @@ import java.util.Map;
 public class DataLoadAPI {
 
     private final DataLoadService dataLoadService;
+    private final AirportRepository airportRepository;
+    private final FlightRepository flightRepository;
+    private final OrderRepository orderRepository;
 
     /**
      * Load orders from _pedidos_{AIRPORT}_ files into database
@@ -101,20 +107,29 @@ public class DataLoadAPI {
 
     /**
      * Get data loading status and statistics
-     * Shows how many orders are currently in the database
+     * Shows how many airports, flights and orders are currently in the database
      *
      * Example: GET /api/data/status
      */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getDataStatus() {
         try {
-            // TODO: Implement actual status check
-            // For now, return placeholder
+            // Get counts from database
+            long airportCount = airportRepository.count();
+            long flightCount = flightRepository.count();
+            long orderCount = orderRepository.count();
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Data status endpoint (placeholder)");
+            response.put("message", "Data status retrieved successfully");
             response.put("dataDirectory", getDefaultDataDirectory());
+            
+            // Statistics
+            Map<String, Object> statistics = new HashMap<>();
+            statistics.put("airports", airportCount);
+            statistics.put("flights", flightCount);
+            statistics.put("orders", orderCount);
+            response.put("statistics", statistics);
 
             return ResponseEntity.ok(response);
 

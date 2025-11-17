@@ -281,15 +281,37 @@ public class DataImportService {
             Customer defaultCustomer = getOrCreateDefaultCustomer();
 
             int productCount = 0;
+            int ordersSkipped = 0;
+            
+            System.out.println("========================================");
+            System.out.println("PROCESSING " + orderSchemas.size() + " ORDERS FROM InputProducts");
+            System.out.println("Available cities in DB: " + cityMap.keySet());
+            System.out.println("========================================");
+            
             for (OrderSchema orderSchema : orderSchemas) {
                 // Handle Order
-                City destCity = cityMap.get(orderSchema.getDestinationCitySchema().getName());
-                City originCity = cityMap.get(orderSchema.getCurrentLocation().getName());
+                String destCityName = orderSchema.getDestinationCitySchema().getName();
+                String originCityName = orderSchema.getCurrentLocation().getName();
+                Continent destContinent = orderSchema.getDestinationCitySchema().getContinent();
+                Continent originContinent = orderSchema.getCurrentLocation().getContinent();
+                
+                System.out.println("Order " + orderSchema.getName() + ":");
+                System.out.println("  Origin from InputProducts: " + originCityName + " (" + originContinent + ")");
+                System.out.println("  Destination from InputProducts: " + destCityName + " (" + destContinent + ")");
+                
+                City destCity = cityMap.get(destCityName);
+                City originCity = cityMap.get(originCityName);
 
                 if (destCity == null || originCity == null) {
-                    System.err.println("Warning: Could not find cities for order " + orderSchema.getId());
+                    System.err.println("ERROR: Could not find cities for order " + orderSchema.getId());
+                    System.err.println("  Looking for origin: '" + originCityName + "' - " + (originCity != null ? "FOUND" : "NOT FOUND"));
+                    System.err.println("  Looking for dest: '" + destCityName + "' - " + (destCity != null ? "FOUND" : "NOT FOUND"));
+                    System.err.println("  Available city names: " + cityMap.keySet());
+                    ordersSkipped++;
                     continue;
                 }
+                
+                System.out.println("  ✓ Mapped to DB: " + originCity.getName() + " → " + destCity.getName());
 
                 Order order = Order.builder()
                         .name(orderSchema.getName() != null ? orderSchema.getName() : "ORDER-" + orderSchema.getId())
@@ -407,6 +429,48 @@ public class DataImportService {
         return origin.getCity().getContinent().equals(destination.getCity().getContinent());
     }
 
+    private City resolveWarehouseCity(String airportCode,
+                                      String fallbackCityName,
+                                      Map<String, Airport> airportByCode,
+                                      List<Airport> airports) {
+        Airport airport = airportByCode.get(airportCode.toUpperCase(Locale.ROOT));
+        if (airport != null && airport.getCity() != null) {
+            return airport.getCity();
+        }
+
+        String fallbackLower = fallbackCityName.toLowerCase(Locale.ROOT);
+        for (Airport a : airports) {
+            City city = a.getCity();
+            if (city == null || city.getName() == null) continue;
+            String cityNameLower = city.getName().toLowerCase(Locale.ROOT);
+            if (cityNameLower.contains(fallbackLower) || fallbackLower.contains(cityNameLower)) {
+                return city;
+            }
+        }
+
+        throw new IllegalStateException("No se encontró ciudad para el almacén principal " +
+                fallbackCityName + " (" + airportCode + ")");
+    }
+
+    private City getWarehouseForContinent(Continent continent,
+                                          City limaWarehouse,
+                                          City brusselsWarehouse,
+                                          City bakuWarehouse) {
+        if (continent == null) {
+            return limaWarehouse;
+        }
+        switch (continent) {
+            case America:
+                return limaWarehouse;
+            case Europa:
+                return brusselsWarehouse;
+            case Asia:
+                return bakuWarehouse;
+            default:
+                return limaWarehouse;
+        }
+    }
+
     /**
      * Get or create a default customer for data import.
      * This avoids the need to create individual customers for each order during import.
@@ -466,7 +530,14 @@ public class DataImportService {
             orderRepository.deleteAll();
 
             Map<String, Airport> airportByCode = new HashMap<>();
-            for (Airport a : airports) airportByCode.put(a.getCodeIATA(), a);
+            for (Airport a : airports) {
+                if (a.getCodeIATA() != null) {
+                    airportByCode.put(a.getCodeIATA().toUpperCase(), a);
+                }
+            }
+            City limaWarehouse = resolveWarehouseCity("SPIM", "Lima", airportByCode, airports);
+            City brusselsWarehouse = resolveWarehouseCity("EBCI", "Bruselas", airportByCode, airports);
+            City bakuWarehouse = resolveWarehouseCity("UBBB", "Baku", airportByCode, airports);
             Customer defaultCustomer = getOrCreateDefaultCustomer();
 
             File folder = new File("data/products");
@@ -510,7 +581,7 @@ public class DataImportService {
                     if (date.isBefore(start) || date.isAfter(end)) continue;
 
                     String id = p[0];
-                    String airportCode = p[4];
+                    String airportCode = p[4].toUpperCase(Locale.ROOT);
                     int qty;
                     int hour;
                     int minute;
@@ -527,17 +598,27 @@ public class DataImportService {
                     Airport destAirport = airportByCode.get(airportCode);
                     if (destAirport == null || destAirport.getCity() == null) continue;
                     City destCity = destAirport.getCity();
+                    City originCity = getWarehouseForContinent(destCity.getContinent(),
+                            limaWarehouse, brusselsWarehouse, bakuWarehouse);
+                    if (originCity == null) {
+                        System.err.println("No se pudo determinar almacén para continente " +
+                                destCity.getContinent() + " (orden " + id + ")");
+                        continue;
+                    }
 
                     // Create creationDate from date + hour + minute
                     LocalDateTime creationDate = LocalDateTime.of(date.getYear(), date.getMonth(), date.getDayOfMonth(), hour, minute);
+                    boolean sameContinent = originCity.getContinent() == destCity.getContinent();
+                    int deliveryDays = sameContinent ? 2 : 3;
+                    LocalDateTime deliveryDeadline = creationDate.plusDays(deliveryDays);
 
                     Order order = Order.builder()
-                            .name("ORDER-" + id)
+                            .name("Order-" + airportCode + "-" + id)
                             .customer(defaultCustomer)
-                            .deliveryDate(date.atStartOfDay())
+                            .deliveryDate(deliveryDeadline)
                             .pickupTimeHours(pickupHour)
                             .status(PackageStatus.PENDING)
-                            .origin(destCity)
+                            .origin(originCity)
                             .destination(destCity)
                             .creationDate(creationDate)
                             .build();

@@ -10,7 +10,6 @@ import java.io.FileReader;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +24,11 @@ public class InputProducts {
     private Random random;
     private int productIdCounter = 1;
     private int orderIdCounter = 1;
+
+    // Main warehouse city references (cached for quick lookup)
+    private CitySchema limaWarehouseCity;
+    private CitySchema brusselsWarehouseCity;
+    private CitySchema bakuWarehouseCity;
 
     // NEW: Simulation time window for filtering orders
     private LocalDateTime simulationStartTime;
@@ -42,6 +46,7 @@ public class InputProducts {
         this.simulationStartTime = simulationStartTime;
         this.simulationEndTime = simulationEndTime;
         createAirportMap();
+        initializeMainWarehouses();
     }
 
     /**
@@ -56,12 +61,81 @@ public class InputProducts {
         this.simulationStartTime = null; // No filtering
         this.simulationEndTime = null;
         createAirportMap();
+        initializeMainWarehouses();
     }
 
     private void createAirportMap() {
         this.airportMap = new HashMap<>();
         for (AirportSchema airportSchema : airportSchemas) {
             airportMap.put(airportSchema.getCodeIATA(), airportSchema);
+        }
+    }
+
+    /**
+     * Identify the 3 unlimited-stock hubs (Lima, Bruselas, Baku).
+     * Orders will always depart from these hubs depending on destination continent.
+     */
+    private void initializeMainWarehouses() {
+        this.limaWarehouseCity = findWarehouseCity("SPIM", "Lima");
+        this.brusselsWarehouseCity = findWarehouseCity("EBCI", "Bruselas");
+        this.bakuWarehouseCity = findWarehouseCity("UBBB", "Baku");
+
+        if (limaWarehouseCity == null) {
+            throw new IllegalStateException("Main warehouse city not found for Lima (SPIM). " +
+                    "Verify airportInfo.txt defines SPIM with city Lima.");
+        }
+        if (brusselsWarehouseCity == null) {
+            throw new IllegalStateException("Main warehouse city not found for Brussels (EBCI). " +
+                    "Verify airportInfo.txt defines EBCI with city Bruselas/Brussels.");
+        }
+        if (bakuWarehouseCity == null) {
+            throw new IllegalStateException("Main warehouse city not found for Baku (UBBB). " +
+                    "Verify airportInfo.txt defines UBBB with city Baku.");
+        }
+    }
+
+    /**
+     * Locate a city using IATA code (preferred) or fuzzy city name match.
+     */
+    private CitySchema findWarehouseCity(String airportCode, String fallbackCityName) {
+        AirportSchema airportSchema = airportMap != null ? airportMap.get(airportCode) : null;
+        if (airportSchema != null && airportSchema.getCitySchema() != null) {
+            return airportSchema.getCitySchema();
+        }
+
+        String target = fallbackCityName.toLowerCase();
+        for (AirportSchema schema : airportSchemas) {
+            if (schema.getCitySchema() == null || schema.getCitySchema().getName() == null) {
+                continue;
+            }
+            String cityName = schema.getCitySchema().getName().toLowerCase();
+            if (cityName.contains(target) || target.contains(cityName)) {
+                return schema.getCitySchema();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Given the destination continent, returns the appropriate hub city.
+     */
+    private CitySchema getWarehouseForContinent(Continent continent) {
+        if (continent == null) {
+            System.err.println("WARNING: Destination continent is null. Defaulting origin to Lima.");
+            return limaWarehouseCity;
+        }
+
+        switch (continent) {
+            case America:
+                return limaWarehouseCity;
+            case Europa:
+                return brusselsWarehouseCity;
+            case Asia:
+                return bakuWarehouseCity;
+            default:
+                System.err.println("WARNING: Unknown continent " + continent + ". Defaulting origin to Lima.");
+                return limaWarehouseCity;
         }
     }
 
@@ -105,18 +179,22 @@ public class InputProducts {
 
         // Read each order file
         for (File orderFile : orderFiles) {
-            // Extract origin airport code from filename
-            // Example: _pedidos_LDZA_ -> LDZA
+            // Extract airport code from filename (represents destination hub)
+            // Example: _pedidos_EBCI_ -> EBCI
             String fileName = orderFile.getName();
-            String originAirportCode = fileName.replace("_pedidos_", "").replace("_", "");
+            String fileAirportCode = fileName.replace("_pedidos_", "").replace("_", "");
 
-            AirportSchema originAirport = airportMap.get(originAirportCode);
-            if (originAirport == null) {
-                System.err.println("WARNING: Unknown origin airport code: " + originAirportCode + " in file: " + fileName);
+            AirportSchema fileAirport = airportMap.get(fileAirportCode);
+            if (fileAirport == null) {
+                System.err.println("WARNING: Unknown airport code in filename: " + fileAirportCode + " in file: " + fileName);
+                System.err.println("         Skipping file because destination hub cannot be identified.");
                 continue;
             }
 
-            System.out.println("Reading orders from: " + fileName + " (origin: " + originAirportCode + ")");
+            String hubCityName = (fileAirport.getCitySchema() != null && fileAirport.getCitySchema().getName() != null)
+                    ? fileAirport.getCitySchema().getName()
+                    : "Unknown city";
+            System.out.println("Reading orders from: " + fileName + " (hub: " + fileAirportCode + " / " + hubCityName + ")");
 
             try (BufferedReader reader = new BufferedReader(new FileReader(orderFile))) {
                 String line;
@@ -174,9 +252,16 @@ public class InputProducts {
                             continue;
                         }
 
-                        // Calculate delivery deadline based on route type
-                        CitySchema originCity = originAirport.getCitySchema();
                         CitySchema destinationCity = destinationAirport.getCitySchema();
+                        CitySchema originCity = getWarehouseForContinent(destinationCity.getContinent());
+
+                        if (originCity == null) {
+                            System.err.println("ERROR: Origin warehouse not configured for continent " +
+                                    destinationCity.getContinent() + " (order " + orderId + ")");
+                            continue;
+                        }
+
+                        // Calculate delivery deadline based on route type
                         boolean sameContinentRoute = originCity.getContinent() == destinationCity.getContinent();
 
                         // MoraPack delivery promise: 2 days (same continent), 3 days (different continent)
