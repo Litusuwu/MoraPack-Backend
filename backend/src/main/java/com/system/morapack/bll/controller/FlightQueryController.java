@@ -199,6 +199,13 @@ public class FlightQueryController {
                 )
             ));
 
+        // Calculate status breakdown
+        Map<String, Long> statusBreakdown = products.stream()
+            .collect(Collectors.groupingBy(
+                p -> p.getStatus() != null ? p.getStatus().toString() : "UNKNOWN",
+                Collectors.counting()
+            ));
+
         Map<String, Object> flightInfo = new HashMap<>();
         flightInfo.put("id", flight.getId());
         flightInfo.put("code", flight.getCode());
@@ -211,9 +218,11 @@ public class FlightQueryController {
         response.put("success", true);
         response.put("flightCode", flightCode);
         response.put("totalProducts", products.size());
+        response.put("productCount", products.size());  // For frontend compatibility
         response.put("products", productDTOs);
         response.put("flight", flightInfo);
         response.put("groupedByOrder", groupedByOrder);
+        response.put("statusBreakdown", statusBreakdown);  // For frontend totals display
 
         return response;
     }
@@ -312,25 +321,33 @@ public class FlightQueryController {
     }
 
     private String extractFlightCodeFromInstance(Product product) {
-        // Extract flight code from instance like "FL-6545-DAY-0-2000" or "SPIM-SPZO-DAY-0-2000"
+        // Extract flight code from instance like "FL-6545-DAY-0-2000"
         String instance = product.getAssignedFlightInstance();
         if (instance == null || instance.isEmpty()) {
+            System.out.println("WARNING: Product " + product.getId() + " has no assigned flight instance");
             return "";
         }
 
-        // Check if it starts with "FL-" (old format with ID)
+        // Format: "FL-6545-DAY-0-2000"
+        // We need to extract the base flight ID (6545) and find its flight code
         if (instance.startsWith("FL-")) {
-            // Format: "FL-6545-DAY-0-2000"
-            // We need to find the actual flight code from the database
-            // For now, return empty - this should be improved
-            return "";
-        }
-
-        // Format: "SPIM-SPZO-DAY-0-2000"
-        // Extract "SPIM-SPZO"
-        String[] parts = instance.split("-");
-        if (parts.length >= 2) {
-            return parts[0] + "-" + parts[1];
+            // Parse: FL-{flightId}-DAY-{day}-{time}
+            String[] parts = instance.split("-");
+            if (parts.length >= 2) {
+                try {
+                    Integer flightId = Integer.parseInt(parts[1]);
+                    // Find the flight by ID and get its code
+                    Flight flight = flightService.get(flightId);
+                    if (flight != null) {
+                        System.out.println("  Extracted flight code '" + flight.getCode() + "' from instance: " + instance);
+                        return flight.getCode();
+                    } else {
+                        System.err.println("  ERROR: Flight with ID " + flightId + " not found for instance: " + instance);
+                    }
+                } catch (NumberFormatException e) {
+                    System.err.println("  ERROR: Failed to parse flight ID from instance: " + instance);
+                }
+            }
         }
 
         return "";
