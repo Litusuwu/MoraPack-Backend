@@ -339,7 +339,6 @@ public class FlightQueryController {
                     // Find the flight by ID and get its code
                     Flight flight = flightService.get(flightId);
                     if (flight != null) {
-                        System.out.println("  Extracted flight code '" + flight.getCode() + "' from instance: " + instance);
                         return flight.getCode();
                     } else {
                         System.err.println("  ERROR: Flight with ID " + flightId + " not found for instance: " + instance);

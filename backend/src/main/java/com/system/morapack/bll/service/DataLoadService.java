@@ -9,6 +9,7 @@ import com.system.morapack.dao.morapack_psql.model.User;
 import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
+import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.dao.morapack_psql.service.UserService;
 import com.system.morapack.schemas.PackageStatus;
 import com.system.morapack.schemas.TypeUser;
@@ -39,6 +40,7 @@ public class DataLoadService {
     private final OrderService orderService;
     private final AirportService airportService;
     private final CustomerService customerService;
+    private final ProductService productService;
     private final UserService userService;
     private final jakarta.persistence.EntityManager entityManager;
 
@@ -56,6 +58,7 @@ public class DataLoadService {
     /**
      * Clear all orders and their associated products from database
      * Use this before loading fresh data to avoid duplicates
+     * Deletes products first to handle foreign key constraints
      */
     @Transactional
     public void clearAllOrders() {
@@ -64,13 +67,19 @@ public class DataLoadService {
         System.out.println("========================================");
 
         try {
-            // Delete all orders (cascade will delete products)
+            // Delete all products first (they reference orders)
+            productService.deleteAll();
+            System.out.println("Products cleared");
+            
+            // Delete all orders
             orderService.deleteAll();
+            System.out.println("Orders cleared");
             
             System.out.println("Successfully cleared all orders and products");
             System.out.println("========================================");
         } catch (Exception e) {
             System.err.println("Error clearing orders: " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Failed to clear orders", e);
         }
     }
