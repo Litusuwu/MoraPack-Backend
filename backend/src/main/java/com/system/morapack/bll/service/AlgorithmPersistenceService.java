@@ -112,8 +112,6 @@ public class AlgorithmPersistenceService {
             String orderName = entry.getKey();
             List<OrderSplit> splits = entry.getValue();
 
-            System.out.println("Order " + orderName + ": Preparing " + splits.size() + " product(s)");
-
             // Fetch the order entity once for all splits (performance optimization)
             // If order doesn't exist (e.g., loaded from FILE mode but not in DB), skip
             com.system.morapack.dao.morapack_psql.model.Order orderEntity;
@@ -291,13 +289,19 @@ public class AlgorithmPersistenceService {
         // OPTIMIZATION: Collect all products for batch insert
         List<Product> allProducts = new ArrayList<>();
         int productCounter = 0;
+        int logCounter = 0;
 
         // For each order, create products for its splits
         for (Map.Entry<String, List<OrderSplitWithInstances>> entry : splitsByOrder.entrySet()) {
             String orderName = entry.getKey();
             List<OrderSplitWithInstances> splits = entry.getValue();
 
-            System.out.println("Order " + orderName + ": Preparing " + splits.size() + " product(s)");
+            if (logCounter < 5) {
+                System.out.println("Order " + orderName + ": Preparing " + splits.size() + " product(s)");
+            } else if (logCounter == 5) {
+                System.out.println("... (suppressing further 'Preparing' logs) ...");
+            }
+            logCounter++;
 
             // Fetch the order entity
             com.system.morapack.dao.morapack_psql.model.Order orderEntity;
@@ -335,8 +339,6 @@ public class AlgorithmPersistenceService {
                 if (!split.getAssignedFlightInstances().isEmpty()) {
                     FlightInstanceSchema firstInstance = split.getAssignedFlightInstances().get(0);
                     product.setAssignedFlightInstance(firstInstance.getInstanceId());
-
-                    System.out.println("  Product assigned to instance: " + firstInstance.getInstanceId());
                 }
 
                 // Create ProductFlight records

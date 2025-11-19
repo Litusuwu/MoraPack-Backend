@@ -73,4 +73,9 @@ public class ProductService {
   public void bulkDeleteProducts(List<Integer> ids) {
     productRepository.deleteAllByIdIn(ids);
   }
+
+  @Transactional
+  public void deleteAll() {
+    productRepository.deleteAll();
+  }
 }
