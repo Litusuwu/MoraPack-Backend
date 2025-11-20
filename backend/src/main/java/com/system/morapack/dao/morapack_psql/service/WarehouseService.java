@@ -86,7 +86,13 @@ public class WarehouseService {
     if (amount <= 0) throw new IllegalArgumentException("amount must be > 0");
     Warehouse w = getWarehouse(id);
     int newUsed = w.getUsedCapacity() + amount;
-    if (newUsed > w.getMaxCapacity()) throw new IllegalArgumentException("capacity exceeded");
+
+    // Check capacity ONLY if it's NOT a main warehouse
+    if (!Boolean.TRUE.equals(w.getIsMainWarehouse())) {
+      if (newUsed > w.getMaxCapacity())
+        throw new IllegalArgumentException("capacity exceeded");
+      }
+
     w.setUsedCapacity(newUsed);
     return warehouseRepository.save(w);
   }
@@ -109,9 +115,13 @@ public class WarehouseService {
       throw new IllegalArgumentException("maxCapacity inválido");
     if (w.getUsedCapacity() == null || w.getUsedCapacity() < 0)
       throw new IllegalArgumentException("usedCapacity inválido");
-    if (w.getUsedCapacity() > w.getMaxCapacity())
-      throw new IllegalArgumentException("usedCapacity no puede exceder maxCapacity");
     if (w.getIsMainWarehouse() == null)
       throw new IllegalArgumentException("isMainWarehouse requerido");
+
+    // Check capacity ONLY if it's NOT a main warehouse
+    if (!Boolean.TRUE.equals(w.getIsMainWarehouse())) {
+      if (w.getUsedCapacity() > w.getMaxCapacity())
+        throw new IllegalArgumentException("usedCapacity no puede exceder maxCapacity");
+      }
   }
 }

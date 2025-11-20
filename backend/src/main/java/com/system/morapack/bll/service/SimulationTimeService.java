@@ -7,6 +7,8 @@ import com.system.morapack.dao.morapack_psql.model.ProductFlight;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
+import com.system.morapack.dao.morapack_psql.service.WarehouseService;
+import com.system.morapack.dao.morapack_psql.repository.AirportRepository;
 import com.system.morapack.schemas.PackageStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,7 +32,8 @@ public class SimulationTimeService {
 
     private final ProductService productService;
     private final OrderService orderService;
-    private final FlightService flightService;
+    private final WarehouseService warehouseService;
+    private final AirportRepository airportRepository;
 
     /**
      * Actualiza estados de productos basándose en el tiempo actual de simulación
@@ -211,10 +214,62 @@ public class SimulationTimeService {
             PackageStatus orderStatus = calculateOrderStatus(order);
 
             if (order.getStatus() != orderStatus) {
+              // Actualizar capacidad de almacenes antes de cambiar el estado
+              handleCapacityUpdate(order, order.getStatus(), orderStatus);
+
                 order.setStatus(orderStatus);
                 orderService.save(order);
             }
         }
+    }
+
+    /**
+     * Maneja la actualización de capacidad en los almacenes
+     * Regla: Los ORDERS ocupan espacio (1 unidad por orden)
+     */
+    private void handleCapacityUpdate(Order order, PackageStatus oldStatus, PackageStatus newStatus) {
+      try {
+        // PENDING -> IN_TRANSIT: Sale del origen
+        if (oldStatus == PackageStatus.PENDING && newStatus == PackageStatus.IN_TRANSIT) {
+          updateAirportCapacity(order.getOrigin(), -1);
+        }
+        // IN_TRANSIT -> ARRIVED: Llega al destino
+        else if (oldStatus == PackageStatus.IN_TRANSIT && newStatus == PackageStatus.ARRIVED) {
+          updateAirportCapacity(order.getDestination(), 1);
+        }
+        // ARRIVED -> DELIVERED: Sale del destino (entregado)
+        else if (oldStatus == PackageStatus.ARRIVED && newStatus == PackageStatus.DELIVERED) {
+          updateAirportCapacity(order.getDestination(), -1);
+        }
+      } catch (Exception e) {
+        System.err.println("Error updating warehouse capacity for order " + order.getId() + ": " + e.getMessage());
+        // No re-lanzamos para no detener la simulación
+      }
+    }
+
+    private void updateAirportCapacity(com.system.morapack.dao.morapack_psql.model.City city, int change) {
+      if (city == null)
+        return;
+
+      List<com.system.morapack.dao.morapack_psql.model.Airport> airports = airportRepository
+          .findByCity_Id(city.getId());
+      if (airports.isEmpty())
+        return;
+
+      // Asumimos el primer aeropuerto de la ciudad
+      com.system.morapack.dao.morapack_psql.model.Airport airport = airports.get(0);
+
+      if (airport.getWarehouse() != null) {
+        if (change > 0) {
+          warehouseService.allocate(airport.getWarehouse().getId(), change);
+          System.out.println(
+              "Warehouse " + airport.getWarehouse().getId() + " (City " + city.getName() + "): Allocated " + change);
+        } else {
+          warehouseService.release(airport.getWarehouse().getId(), Math.abs(change));
+          System.out.println("Warehouse " + airport.getWarehouse().getId() + " (City " + city.getName() + "): Released "
+              + Math.abs(change));
+        }
+      }
     }
 
     /**
