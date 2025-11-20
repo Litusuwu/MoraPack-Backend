@@ -11,6 +11,7 @@ import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.dao.morapack_psql.service.UserService;
+import com.system.morapack.dao.morapack_psql.service.WarehouseService;
 import com.system.morapack.schemas.PackageStatus;
 import com.system.morapack.schemas.TypeUser;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +43,50 @@ public class DataLoadService {
     private final CustomerService customerService;
     private final ProductService productService;
     private final UserService userService;
+    private final WarehouseService warehouseService;
     private final jakarta.persistence.EntityManager entityManager;
+
+    // ... existing code ...
+
+    /**
+     * Update warehouse capacity for newly loaded orders
+     * Orders start at their origin warehouse (PENDING status)
+     */
+    private void updateInitialWarehouseCapacity(List<Order> orders) {
+      System.out.println("Updating initial warehouse capacities...");
+      Map<Integer, Integer> cityOrderCounts = new HashMap<>();
+
+      for (Order order : orders) {
+        if (order.getOrigin() != null) {
+          cityOrderCounts.merge(order.getOrigin().getId(), 1, Integer::sum);
+        }
+      }
+
+      for (Map.Entry<Integer, Integer> entry : cityOrderCounts.entrySet()) {
+        Integer cityId = entry.getKey();
+        Integer count = entry.getValue();
+
+        try {
+          List<Airport> airports = airportService.getByCity(cityId);
+          if (!airports.isEmpty()) {
+            // Assume first airport for the city (usually 1:1 for main hubs)
+            Airport airport = airports.get(0);
+            if (airport.getWarehouse() != null) {
+              warehouseService.allocate(airport.getWarehouse().getId(), count);
+              System.out.println("Allocated " + count + " orders to warehouse " +
+                  airport.getWarehouse().getId() + " (City ID: " + cityId + ")");
+            }
+          }
+        } catch (Exception e) {
+          System.err.println("Failed to update capacity for city " + cityId + ": " + e.getMessage());
+        }
+      }
+    }
+
+    /**
+     * Helper class to hold parsed order data before creating entities
+     * ...
+     */
 
     // Cache for airport lookups (airport code -> Airport entity)
     private Map<String, Airport> airportCache = new HashMap<>();
@@ -217,6 +261,10 @@ public class DataLoadService {
                 List<Order> createdOrders = orderService.bulkCreateOrders(ordersToCreate);
                 result.ordersCreated = createdOrders.size();
                 result.success = true;
+
+                // Update initial warehouse capacity for the new orders
+                updateInitialWarehouseCapacity(createdOrders);
+
             } catch (Exception e) {
                 result.success = false;
                 result.errorMessage = "Failed to insert orders: " + e.getMessage();
