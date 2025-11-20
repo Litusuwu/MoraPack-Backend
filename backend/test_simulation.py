@@ -102,10 +102,10 @@ def load_initial_data():
         print(f"Error loading flights: {e}")
 
     # 3. Load Orders
-    print("Loading orders for 2025-01-02 to 2025-01-09...")
+    print("Loading orders for 2025-01-02 to 2025-01-08...")
     params = {
         "startTime": "2025-01-02T00:00:00",
-        "endTime": "2025-01-09T00:00:00"
+        "endTime": "2025-01-08T00:00:00"
     }
     try:
         resp = requests.post(f"{BASE_URL}/data/load-orders", params=params)
