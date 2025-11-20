@@ -68,4 +68,12 @@ public class OrderAPI {
     orderController.deleteOrder(id);
     return ResponseEntity.noContent().build();
   }
+
+  @DeleteMapping("/all")
+  public ResponseEntity<Void> clearAllOrdersAndProducts() {
+    orderController.clearOrdersAndProducts();
+    return ResponseEntity.noContent().build();
+  }
+
+
 }

@@ -43,6 +43,10 @@ public class OrderController {
     orderAdapter.deleteOrder(id);
   }
 
+  public void clearOrdersAndProducts() {
+    orderAdapter.clearOrdersAndProducts();
+  }
+
   public void bulkDeleteOrders(List<Integer> ids) {
     orderAdapter.bulkDeleteOrders(ids);
   }
@@ -54,4 +58,7 @@ public class OrderController {
   public List<OrderSchema> getOrdersByStatus(PackageStatus status) {
     return orderAdapter.getOrdersByStatus(status);
   }
+
+
+
 }

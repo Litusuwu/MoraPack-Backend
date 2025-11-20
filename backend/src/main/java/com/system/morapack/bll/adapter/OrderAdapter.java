@@ -6,6 +6,7 @@ import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.service.CityService;
 import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
+import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.schemas.OrderSchema;
 import com.system.morapack.schemas.PackageStatus;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class OrderAdapter {
   private final OrderService orderService;
   private final CityService cityService;
   private final CustomerService customerService;
+  private final ProductService productService;
 
   private OrderSchema mapToSchema(Order order) {
     return OrderSchema.builder()
@@ -101,11 +103,22 @@ public class OrderAdapter {
   }
 
   public void deleteOrder(Integer id) {
+    // Primero borra productos relacionados, luego la orden
+    productService.deleteByOrderId(id);  // necesitas este método en ProductService
     orderService.deleteOrder(id);
   }
 
   public void bulkDeleteOrders(List<Integer> ids) {
+    // Primero borra todos los productos de esas órdenes,
+    // luego las órdenes
+    productService.deleteByOrderIds(ids); // idem: método en ProductService
     orderService.bulkDeleteOrders(ids);
+  }
+
+  public void clearOrdersAndProducts() {
+    // Limpieza total: primero hijos, luego padres
+    productService.deleteAllProducts();  // o deleteAll()/deleteAllInBatch()
+    orderService.clearOrders();          // método que borre todas las órdenes
   }
 
   public List<OrderSchema> getOrdersByDeliveryDateRange(LocalDateTime start, LocalDateTime end) {

@@ -78,4 +78,21 @@ public class ProductService {
   public void deleteAll() {
     productRepository.deleteAll();
   }
+
+  @Transactional
+  public void deleteByOrderId(Integer orderId) {
+    productRepository.deleteByOrder_Id(orderId);
+  }
+
+  @Transactional
+  public void deleteByOrderIds(List<Integer> orderIds) {
+    if (orderIds == null || orderIds.isEmpty()) return;
+    productRepository.deleteByOrder_IdIn(orderIds);
+  }
+
+  @Transactional
+  public void deleteAllProducts() {
+    productRepository.deleteAll();
+  }
+
 }

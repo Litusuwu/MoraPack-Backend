@@ -109,4 +109,10 @@ public class OrderService {
   public List<Order> getOrdersByStatus(PackageStatus status) {
     return orderRepository.findByStatus(status);
   }
+
+  @Transactional
+  public void clearOrders() {
+    orderRepository.deleteAll();
+  }
+
 }
