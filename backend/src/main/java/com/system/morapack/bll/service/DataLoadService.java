@@ -6,6 +6,7 @@ import com.system.morapack.dao.morapack_psql.model.City;
 import com.system.morapack.dao.morapack_psql.model.Customer;
 import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.User;
+import com.system.morapack.dao.morapack_psql.model.Warehouse;
 import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.CustomerService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
@@ -46,8 +47,6 @@ public class DataLoadService {
     private final WarehouseService warehouseService;
     private final jakarta.persistence.EntityManager entityManager;
 
-    // ... existing code ...
-
     /**
      * Update warehouse capacity for newly loaded orders
      * Orders start at their origin warehouse (PENDING status)
@@ -72,9 +71,21 @@ public class DataLoadService {
             // Assume first airport for the city (usually 1:1 for main hubs)
             Airport airport = airports.get(0);
             if (airport.getWarehouse() != null) {
-              warehouseService.allocate(airport.getWarehouse().getId(), count);
+              Integer warehouseId = airport.getWarehouse().getId();
+              Warehouse w = warehouseService.getWarehouse(warehouseId);
+              
+              // Check capacity before allocating to avoid Transaction Rollback
+              if (!Boolean.TRUE.equals(w.getIsMainWarehouse())) {
+                  if (w.getUsedCapacity() + count > w.getMaxCapacity()) {
+                      System.err.println("WARNING: Warehouse " + warehouseId + " (City " + cityId + 
+                          ") capacity exceeded. Skipping allocation of " + count + " orders.");
+                      continue;
+                  }
+              }
+
+              warehouseService.allocate(warehouseId, count);
               System.out.println("Allocated " + count + " orders to warehouse " +
-                  airport.getWarehouse().getId() + " (City ID: " + cityId + ")");
+                  warehouseId + " (City ID: " + cityId + ")");
             }
           }
         } catch (Exception e) {

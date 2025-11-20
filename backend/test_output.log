@@ -1,0 +1,47 @@
+/Users/litus/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+
+==================================================
+STARTING SIMULATION FLOW TEST
+==================================================
+
+==================================================
+0. Loading Initial Data
+==================================================
+Loading airports...
+Airports loaded: 30
+Loading flights...
+Flights loaded: 2866
+Loading orders for 2025-01-02 to 2025-01-09...
+Traceback (most recent call last):
+  File "/Users/litus/Documents/Universidad/9-Semester/MoraPack-DP1/MoraPack/backend/test_simulation.py", line 162, in <module>
+    main()
+  File "/Users/litus/Documents/Universidad/9-Semester/MoraPack-DP1/MoraPack/backend/test_simulation.py", line 97, in main
+    load_initial_data()
+  File "/Users/litus/Documents/Universidad/9-Semester/MoraPack-DP1/MoraPack/backend/test_simulation.py", line 83, in load_initial_data
+    resp = requests.post(f"{BASE_URL}/data/load-orders", params=params)
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/requests/adapters.py", line 644, in send
+    resp = conn.urlopen(
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "/Users/litus/Library/Python/3.9/lib/python/site-packages/urllib3/connection.py", line 565, in getresponse
+    httplib_response = super().getresponse()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/http/client.py", line 1349, in getresponse
+    response.begin()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/http/client.py", line 316, in begin
+    version, status, reason = self._read_status()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/http/client.py", line 277, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socket.py", line 704, in readinto
+    return self._sock.recv_into(b)
+KeyboardInterrupt

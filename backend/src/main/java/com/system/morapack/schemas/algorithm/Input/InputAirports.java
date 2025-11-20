@@ -153,10 +153,22 @@ public class InputAirports {
                     // Create Warehouse for the airportSchema
                     WarehouseSchema warehouse = new WarehouseSchema();
                     warehouse.setId(id);
-                    warehouse.setMaxCapacity((int)maxCapacity);
-                    warehouse.setUsedCapacity(0);
                     warehouse.setName(cityName + " Warehouse");
-                    warehouse.setIsMainWarehouse(false);
+
+                    // Mark the three main warehouses (Lima, Brussels, Baku) with unlimited capacity
+                    boolean isMainWarehouse = cityName.equalsIgnoreCase("Lima") ||
+                                             cityName.equalsIgnoreCase("Bruselas") ||
+                                             cityName.equalsIgnoreCase("Baku");
+                    warehouse.setIsMainWarehouse(isMainWarehouse);
+
+                    // Main warehouses get virtually unlimited capacity (999999)
+                    // Other warehouses use the capacity from the file
+                    if (isMainWarehouse) {
+                        warehouse.setMaxCapacity(999999);
+                    } else {
+                        warehouse.setMaxCapacity((int)maxCapacity);
+                    }
+                    warehouse.setUsedCapacity(0);
                     
                     // Create AirportSchema object
                     AirportSchema airportSchema = new AirportSchema();
