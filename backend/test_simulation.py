@@ -119,7 +119,7 @@ def load_initial_data():
         print(f"Error loading orders: {e}")
 
 def main():
-    print_header("STARTING SIMULATION FLOW TEST")
+    print_header("STARTING WEEKLY SIMULATION FLOW TEST")
 
     # 0. Load Data
     load_initial_data()
@@ -133,54 +133,79 @@ def main():
     for w in initial_warehouses[:5]: # Print first 5
         print(f"ID: {w['id']}, Name: {w['name']}, Used: {w['usedCapacity']}/{w['maxCapacity']}")
 
-    # 2. Run Algorithm for Day 1
-    print_header("2. Running Algorithm (Day 1)")
-    # Assuming data is already loaded for 2025-01-02
-    run_result = run_algorithm("2025-01-02")
-    
-    if not run_result:
-        print("Skipping rest of test due to algorithm failure.")
-        return
+    # 2. Configuración de semana
+    WEEK_START_DATE_STR = "2025-01-02"   # coherente con load_initial_data()
+    WEEK_START = datetime.strptime(WEEK_START_DATE_STR + "T00:00:00", "%Y-%m-%dT%H:%M:%S")
 
-    print(f"Algorithm Stats:")
-    print(f"  Total Orders: {run_result.get('totalOrders')}")
-    print(f"  Assigned Orders: {run_result.get('assignedOrders')}")
-    print(f"  Total Products: {run_result.get('totalProducts')}")
-    print(f"  Assigned Products: {run_result.get('assignedProducts')}")
+    DAYS = 7               # 7 días
+    STEP_HOURS = 4         # cada 4 horas
+    TOTAL_HOURS = 24 * DAYS
 
-    if run_result.get('assignedProducts', 0) == 0:
-        print("WARNING: No products were assigned. Checking if orders exist...")
-        # Optional: Add check for existing orders here
-    
-    # 3. Advance time to trigger movements
-    print_header("3. Advancing Time & Updating States")
+    print_header("2. Running Algorithm for a FULL WEEK")
 
-    # Get warehouse state after algorithm run (products assigned to flights)
-    warehouses_after_algorithm = get_warehouses()
-    warehouse_map = {w['id']: w for w in warehouses_after_algorithm}
+    # estado para control de día y almacenes
+    last_algorithm_day = -1
+    warehouse_map = {w['id']: w for w in initial_warehouses}
 
-    print(f"Main warehouses after algorithm:")
-    for w in warehouses_after_algorithm:
-        if 'Lima' in w['name'] or 'Baku' in w['name'] or 'Bruselas' in w['name']:
-            print(f"  {w['name']}: {w['usedCapacity']}/{w['maxCapacity']}")
 
-    # Advance by chunks to see progression
-    start_time = datetime.strptime("2025-01-02T00:00:00", "%Y-%m-%dT%H:%M:%S")
-
-    # Check every 4 hours for 48 hours (2 days)
-    for i in range(1, 13):
-        current_time = start_time + timedelta(hours=i*4)
+    # Recorremos la semana en pasos de 4 horas
+    for step in range(0, TOTAL_HOURS + 1, STEP_HOURS):
+        current_time = WEEK_START + timedelta(hours=step)
         current_time_str = current_time.strftime("%Y-%m-%dT%H:%M:%S")
+
+        # día relativo 0..6
+        delta = current_time - WEEK_START
+        day_number = delta.days
+
+        if day_number >= DAYS:
+            break
+
+        # --- 2.a Ejecutar algoritmo una sola vez por día ---
+        if day_number > last_algorithm_day:
+            print_header(f"DAY {day_number + 1} – Running daily algorithm")
+            
+            # el algoritmo recibe solo la fecha (yyyy-mm-dd)
+            run_result = run_algorithm(current_time.strftime("%Y-%m-%d"))
+            if not run_result:
+                print("Algorithm failure, stopping weekly test.")
+                return
+
+            print("Algorithm Stats:")
+            print(f"  Total Orders: {run_result.get('totalOrders')}")
+            print(f"  Assigned Orders: {run_result.get('assignedOrders')}")
+            print(f"  Total Products: {run_result.get('totalProducts')}")
+            print(f"  Assigned Products: {run_result.get('assignedProducts')}")
+
+            if run_result.get('assignedProducts', 0) == 0:
+                print("WARNING: No products were assigned on this day.")
+
+            last_algorithm_day = day_number
+
+            # Estado de almacenes justo después del algoritmo
+            warehouses_after_algorithm = get_warehouses()
+            warehouse_map = {w['id']: w for w in warehouses_after_algorithm}
+
+            print("Main warehouses after algorithm:")
+            for w in warehouses_after_algorithm:
+                if 'Lima' in w['name'] or 'Baku' in w['name'] or 'Bruselas' in w['name']:
+                    print(f"  {w['name']}: {w['usedCapacity']}/{w['maxCapacity']}")
+
+            # en el instante 00:00 del día recién planificado puedes no llamar update-states
+            if step == 0:
+                continue
+
+        # --- 3. Avanzar tiempo y actualizar estados ---
+        print_header(f"3. Advancing Time & Updating States – {current_time_str}")
         result = update_states(current_time_str, warehouse_map)
         if result and result.get('transitions', {}).get('total', 0) > 0:
             print(f"!!! MOVEMENT DETECTED AT {current_time_str} !!!")
 
-        # Update warehouse map for next iteration
+        # Actualizar mapa de almacenes para el siguiente tick
         warehouses_after_update = get_warehouses()
         warehouse_map = {w['id']: w for w in warehouses_after_update}
 
-    # 4. Get updated warehouse capacities
-    print_header("4. Updated Warehouse Capacities")
+    # 4. Capacidades finales después de la semana
+    print_header("4. Updated Warehouse Capacities AFTER 7 DAYS")
     updated_warehouses = get_warehouses()
     
     print(f"Found {len(updated_warehouses)} warehouses.")
@@ -196,9 +221,9 @@ def main():
                 changes_detected = True
     
     if not changes_detected:
-        print("No warehouse capacity changes detected.")
+        print("No warehouse capacity changes detected across the week.")
     else:
-        print("Warehouse capacity changes verified.")
+        print("Warehouse capacity changes verified for the full week.")
 
 if __name__ == "__main__":
     main()
