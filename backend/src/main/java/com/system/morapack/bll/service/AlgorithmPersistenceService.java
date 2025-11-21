@@ -1,11 +1,16 @@
 package com.system.morapack.bll.service;
 
+import com.system.morapack.dao.morapack_psql.model.Airport;
+import com.system.morapack.dao.morapack_psql.model.City;
 import com.system.morapack.dao.morapack_psql.model.Flight;
+import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.Product;
 import com.system.morapack.dao.morapack_psql.model.ProductFlight;
+import com.system.morapack.dao.morapack_psql.service.AirportService;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
+import com.system.morapack.dao.morapack_psql.service.WarehouseService;
 import com.system.morapack.schemas.FlightInstanceSchema;
 import com.system.morapack.schemas.FlightSchema;
 import com.system.morapack.schemas.OrderSchema;
@@ -38,6 +43,8 @@ public class AlgorithmPersistenceService {
     private final ProductService productService;
     private final OrderService orderService;
     private final FlightService flightService;
+    private final WarehouseService warehouseService;
+    private final AirportService airportService;
 
     /**
      * Represents a split portion of an order
@@ -375,6 +382,10 @@ public class AlgorithmPersistenceService {
         List<Product> savedProducts = productService.bulkCreateProducts(allProducts);
         int productsCreated = savedProducts.size();
 
+        // Deallocate warehouse capacity for products that are IN_TRANSIT
+        // (they left their origin warehouse when assigned to flights)
+        deallocateOriginWarehouses(savedProducts);
+
         System.out.println("========================================");
         System.out.println("PERSISTENCE WITH FLIGHT INSTANCES COMPLETE");
         System.out.println("Products created: " + productsCreated);
@@ -397,5 +408,49 @@ public class AlgorithmPersistenceService {
         }
 
         return grouped;
+    }
+
+    /**
+     * Deallocate warehouse capacity for products that are IN_TRANSIT
+     * When products are assigned to flights, they leave their origin warehouse
+     */
+    private void deallocateOriginWarehouses(List<Product> products) {
+        System.out.println("Deallocating warehouse capacity for IN_TRANSIT products...");
+
+        // Group products by origin city to batch deallocations
+        Map<Integer, Integer> cityProductCounts = new HashMap<>();
+
+        for (Product product : products) {
+            // Only deallocate for products that are IN_TRANSIT (have assigned flights)
+            if (product.getStatus() == PackageStatus.IN_TRANSIT && product.getOrder() != null) {
+                Order order = product.getOrder();
+                if (order.getOrigin() != null) {
+                    City originCity = order.getOrigin();
+                    cityProductCounts.merge(originCity.getId(), 1, Integer::sum);
+                }
+            }
+        }
+
+        // Deallocate from warehouses
+        for (Map.Entry<Integer, Integer> entry : cityProductCounts.entrySet()) {
+            Integer cityId = entry.getKey();
+            Integer count = entry.getValue();
+
+            try {
+                List<Airport> airports = airportService.getByCity(cityId);
+                if (!airports.isEmpty()) {
+                    Airport airport = airports.get(0);
+                    if (airport.getWarehouse() != null) {
+                        Integer warehouseId = airport.getWarehouse().getId();
+                        // Release warehouse capacity (products left the warehouse)
+                        warehouseService.release(warehouseId, count);
+                        System.out.println("Released " + count + " products from warehouse " +
+                            warehouseId + " (City ID: " + cityId + ")");
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to deallocate from city " + cityId + ": " + e.getMessage());
+            }
+        }
     }
 }
