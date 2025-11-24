@@ -282,21 +282,22 @@ public class AlgorithmController {
 
       if (orderSplits != null && !orderSplits.isEmpty()) {
         System.out.println("\n=== PERSISTING ORDER SPLITS TO DATABASE WITH FLIGHT INSTANCES ===");
-        List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits = convertToOrderSplitsWithInstances(orderSplits);
-        productsCreated = persistenceService.persistSolutionWithInstances(persistenceSplits);
-        System.out.println("Persisted " + productsCreated + " product records with flight instances");
-        
-        // Track which orders were persisted (for final statistics)
-        persistedOrderIds.addAll(orderSplits.keySet().stream()
-            .map(key -> {
-              try {
-                return Integer.parseInt(key.replace("ORDER-", ""));
-              } catch (Exception e) {
-                return null;
-              }
-            })
-            .filter(id -> id != null)
-            .collect(java.util.stream.Collectors.toSet()));
+        List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits =
+            convertToOrderSplitsWithInstances(orderSplits);
+        List<AlgorithmPersistenceService.OrderSplitWithInstances> realtimeEligibleSplits =
+            filterRealtimeEligibleSplits(persistenceSplits, simStart);
+
+        if (realtimeEligibleSplits.isEmpty()) {
+          System.out.println("No realtime-eligible splits to persist for window starting at " + simStart);
+        } else {
+          productsCreated = persistenceService.persistSolutionWithInstances(realtimeEligibleSplits);
+          System.out.println("Persisted " + productsCreated + " realtime product records with flight instances");
+
+          persistedOrderIds.addAll(realtimeEligibleSplits.stream()
+              .map(split -> extractNumericOrderId(split.getOrderName()))
+              .filter(Objects::nonNull)
+              .collect(java.util.stream.Collectors.toSet()));
+        }
       } else {
         System.out.println("No order splits to persist");
       }
@@ -473,6 +474,61 @@ public class AlgorithmController {
     }
 
     return splits;
+  }
+
+  /**
+   * Filter order splits so only those whose first flight departs after the realtime cursor are
+   * persisted. This prevents assigning packages onto departures that already left the hub.
+   */
+  private List<AlgorithmPersistenceService.OrderSplitWithInstances> filterRealtimeEligibleSplits(
+      List<AlgorithmPersistenceService.OrderSplitWithInstances> splits,
+      LocalDateTime realtimeWindowStart) {
+
+    if (splits == null || splits.isEmpty() || realtimeWindowStart == null) {
+      return splits;
+    }
+
+    List<AlgorithmPersistenceService.OrderSplitWithInstances> filtered = new ArrayList<>();
+
+    for (AlgorithmPersistenceService.OrderSplitWithInstances split : splits) {
+      LocalDateTime firstDeparture = null;
+
+      if (split.getAssignedFlightInstances() != null) {
+        firstDeparture = split.getAssignedFlightInstances().stream()
+            .map(FlightInstanceSchema::getDepartureDateTime)
+            .filter(Objects::nonNull)
+            .sorted()
+            .findFirst()
+            .orElse(null);
+      }
+
+      if (firstDeparture == null || !firstDeparture.isBefore(realtimeWindowStart)) {
+        filtered.add(split);
+      } else {
+        System.out.println(
+            "Skipping split for " + split.getOrderName() + " (first departure " + firstDeparture +
+                " < window start " + realtimeWindowStart + ")");
+      }
+    }
+
+    return filtered;
+  }
+
+  private Integer extractNumericOrderId(String orderName) {
+    if (orderName == null) {
+      return null;
+    }
+
+    java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(orderName);
+    if (matcher.find()) {
+      try {
+        return Integer.parseInt(matcher.group(1));
+      } catch (NumberFormatException ignored) {
+        return null;
+      }
+    }
+
+    return null;
   }
 
   /**
