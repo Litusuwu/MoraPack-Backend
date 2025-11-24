@@ -285,13 +285,15 @@ public class AlgorithmController {
         List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits =
             convertToOrderSplitsWithInstances(orderSplits);
         List<AlgorithmPersistenceService.OrderSplitWithInstances> realtimeEligibleSplits =
-            filterRealtimeEligibleSplits(persistenceSplits, simStart);
+            shouldApplyRealtimeFilter(request) ?
+                filterRealtimeEligibleSplits(persistenceSplits, simStart) :
+                persistenceSplits;
 
         if (realtimeEligibleSplits.isEmpty()) {
-          System.out.println("No realtime-eligible splits to persist for window starting at " + simStart);
+          System.out.println("No order splits eligible for persistence in this window.");
         } else {
           productsCreated = persistenceService.persistSolutionWithInstances(realtimeEligibleSplits);
-          System.out.println("Persisted " + productsCreated + " realtime product records with flight instances");
+          System.out.println("Persisted " + productsCreated + " product records with flight instances");
 
           persistedOrderIds.addAll(realtimeEligibleSplits.stream()
               .map(split -> extractNumericOrderId(split.getOrderName()))
@@ -480,6 +482,19 @@ public class AlgorithmController {
    * Filter order splits so only those whose first flight departs after the realtime cursor are
    * persisted. This prevents assigning packages onto departures that already left the hub.
    */
+  private boolean shouldApplyRealtimeFilter(AlgorithmRequest request) {
+    if (request == null) {
+      return false;
+    }
+
+    if (request.getSimulationDurationHours() == null) {
+      return false;
+    }
+
+    // Consider realtime windows any slice <= 1 hour
+    return request.getSimulationDurationHours() <= 1.0;
+  }
+
   private List<AlgorithmPersistenceService.OrderSplitWithInstances> filterRealtimeEligibleSplits(
       List<AlgorithmPersistenceService.OrderSplitWithInstances> splits,
       LocalDateTime realtimeWindowStart) {
