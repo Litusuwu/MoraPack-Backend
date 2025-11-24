@@ -28,6 +28,9 @@ public class FlightSchema {
     private LocalTime departureTime;  // e.g., 03:34
     private LocalTime arrivalTime;    // e.g., 05:21
 
+    // ✅ Agregar esta propiedad
+    private Integer assignedProducts;
+
     // Legacy fields for algorithm compatibility
     private double frequencyPerDay;
     private AirportSchema originAirportSchema;

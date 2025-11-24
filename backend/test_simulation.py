@@ -105,7 +105,7 @@ def load_initial_data():
     print("Loading orders for 2025-01-02 to 2025-01-08...")
     params = {
         "startTime": "2025-01-02T00:00:00",
-        "endTime": "2025-01-08T00:00:00"
+        "endTime": "2025-01-08T23:59:59"
     }
     try:
         resp = requests.post(f"{BASE_URL}/data/load-orders", params=params)
@@ -115,6 +115,8 @@ def load_initial_data():
         resp.raise_for_status()
         stats = resp.json().get('statistics', {})
         print(f"Orders loaded: {stats.get('ordersLoaded')}")
+        products_loaded = stats.get('ordersFiltered', 0)
+        print(f"Products loaded: {products_loaded}")
     except Exception as e:
         print(f"Error loading orders: {e}")
 

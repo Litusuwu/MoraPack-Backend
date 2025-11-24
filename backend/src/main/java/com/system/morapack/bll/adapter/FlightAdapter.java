@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.system.morapack.dao.morapack_psql.service.ProductService;
 
 @Component
 @RequiredArgsConstructor
@@ -21,8 +22,16 @@ public class FlightAdapter {
   private final FlightService flightService;
   private final AirportService airportService;
   private final AirplaneService airplaneService;
+  private final ProductService productService; // ✅ Agregar esta inyección
 
   private FlightSchema mapToSchema(Flight flight) {
+
+    // ✅ Contar productos asignados a este vuelo
+    int assignedProducts = 0;
+    if (flight.getCode() != null) {
+      assignedProducts = productService.countByAssignedFlightInstance(flight.getCode());
+    }
+
     return FlightSchema.builder()
         .id(flight.getId())
         .code(flight.getCode())
@@ -37,6 +46,7 @@ public class FlightAdapter {
         .originAirportCode(flight.getOriginAirport() != null ? flight.getOriginAirport().getCodeIATA() : null)
         .destinationAirportId(flight.getDestinationAirport() != null ? flight.getDestinationAirport().getId() : null)
         .destinationAirportCode(flight.getDestinationAirport() != null ? flight.getDestinationAirport().getCodeIATA() : null)
+        .assignedProducts(assignedProducts) // ✅ Agregar aquí
         .build();
   }
 

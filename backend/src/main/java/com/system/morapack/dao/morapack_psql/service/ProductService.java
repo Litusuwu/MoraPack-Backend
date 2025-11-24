@@ -69,6 +69,10 @@ public class ProductService {
     productRepository.deleteById(id);
   }
 
+  public int countByAssignedFlightInstance(String flightCode) {
+    return (int) productRepository.countByFlightCode(flightCode);
+  }
+
   @Transactional
   public void bulkDeleteProducts(List<Integer> ids) {
     productRepository.deleteAllByIdIn(ids);
