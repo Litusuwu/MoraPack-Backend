@@ -75,6 +75,12 @@ public class OrderService {
       order.setPickupTimeHours(updates.getPickupTimeHours());
     if (updates.getStatus() != null)
       order.setStatus(updates.getStatus());
+    if (updates.getOrigin() != null)
+      order.setOrigin(updates.getOrigin());
+    if (updates.getDestination() != null)
+      order.setDestination(updates.getDestination());
+    if (updates.getCustomer() != null)
+      order.setCustomer(updates.getCustomer());
 
     return orderRepository.save(order);
   }

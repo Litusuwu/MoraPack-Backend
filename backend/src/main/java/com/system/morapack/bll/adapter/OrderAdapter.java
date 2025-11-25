@@ -43,12 +43,15 @@ public class OrderAdapter {
   }
 
   private Order mapToEntity(OrderSchema schema) {
+    LocalDateTime now = LocalDateTime.now();
     Order.OrderBuilder builder = Order.builder()
         .id(schema.getId())
         .name(schema.getName())
         .deliveryDate(schema.getDeliveryDate())
         .status(schema.getStatus() != null ? schema.getStatus() : PackageStatus.PENDING)
-        .pickupTimeHours(schema.getPickupTimeHours());
+        .pickupTimeHours(schema.getPickupTimeHours())
+        .creationDate(schema.getCreationDate() != null ? schema.getCreationDate() : now)
+        .updatedAt(schema.getUpdatedAt() != null ? schema.getUpdatedAt() : now);
 
     if (schema.getOriginCityId() != null) {
       City origin = cityService.getCity(schema.getOriginCityId());
@@ -62,6 +65,9 @@ public class OrderAdapter {
 
     if (schema.getCustomerId() != null) {
       Customer customer = customerService.getCustomer(schema.getCustomerId());
+      builder.customer(customer);
+    } else if (schema.getCustomerSchema() != null && schema.getCustomerSchema().getId() != null) {
+      Customer customer = customerService.getCustomer(schema.getCustomerSchema().getId());
       builder.customer(customer);
     }
 
