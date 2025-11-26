@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -41,22 +42,66 @@ public class OrderService {
     return orderRepository.save(order);
   }
 
-  public List<Order> bulkCreateOrders(List<Order> orders) {
-    // Filter out orders that already exist
-    List<Order> uniqueOrders = new ArrayList<>();
-    for (Order order : orders) {
-      if (!orderRepository.existsByName(order.getName())) {
-        uniqueOrders.add(order);
-      }
+  /**
+   * Bulk insert orders WITHOUT duplicate check (use when DB was just cleared)
+   * Much faster for large inserts after clearAllOrders()
+   */
+  public List<Order> bulkCreateOrdersNoDuplicateCheck(List<Order> orders) {
+    if (orders.isEmpty()) {
+      return new ArrayList<>();
     }
-    
-    if (uniqueOrders.isEmpty()) {
-      System.out.println("WARNING: All orders already exist, skipping insert");
+    System.out.println("Direct batch inserting " + orders.size() + " orders (no duplicate check)...");
+    return orderRepository.saveAll(orders);
+  }
+
+  // NOTE: No @Transactional - called from within a transaction
+  public List<Order> bulkCreateOrders(List<Order> orders) {
+    if (orders.isEmpty()) {
       return new ArrayList<>();
     }
     
-    System.out.println("Inserting " + uniqueOrders.size() + " unique orders (filtered " + 
-                      (orders.size() - uniqueOrders.size()) + " duplicates)");
+    // OPTIMIZED: Check for existing orders in batch, but split to avoid PostgreSQL parameter limit
+    // PostgreSQL max parameters: 65535, using chunks of 50000 to be safe
+    final int CHUNK_SIZE = 50000;
+    
+    Set<String> orderNames = orders.stream()
+        .map(Order::getName)
+        .collect(java.util.stream.Collectors.toSet());
+    
+    Set<String> existingNames = new java.util.HashSet<>();
+    List<String> namesList = new ArrayList<>(orderNames);
+    
+    // Split into chunks to avoid "PreparedStatement can have at most 65,535 parameters"
+    for (int i = 0; i < namesList.size(); i += CHUNK_SIZE) {
+      int end = Math.min(i + CHUNK_SIZE, namesList.size());
+      List<String> chunk = namesList.subList(i, end);
+      
+      List<Order> existingInChunk = orderRepository.findByNameIn(chunk);
+      existingNames.addAll(
+          existingInChunk.stream()
+              .map(Order::getName)
+              .collect(java.util.stream.Collectors.toSet())
+      );
+    }
+    
+    // Filter out duplicates
+    List<Order> uniqueOrders = orders.stream()
+        .filter(order -> !existingNames.contains(order.getName()))
+        .collect(java.util.stream.Collectors.toList());
+    
+    if (uniqueOrders.isEmpty()) {
+      System.out.println("WARNING: All " + orders.size() + " orders already exist, skipping insert");
+      return new ArrayList<>();
+    }
+    
+    int duplicates = orders.size() - uniqueOrders.size();
+    if (duplicates > 0) {
+      System.out.println("Filtered out " + duplicates + " duplicate orders");
+    }
+    
+    System.out.println("Batch inserting " + uniqueOrders.size() + " orders using JPA saveAll...");
+    
+    // Use saveAll (Hibernate will batch if configured properly)
     return orderRepository.saveAll(uniqueOrders);
   }
 

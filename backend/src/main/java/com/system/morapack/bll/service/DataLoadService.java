@@ -36,7 +36,6 @@ import java.util.Set;
  * Separates data loading from algorithm execution (Option A architecture)
  */
 @Service
-@RequiredArgsConstructor
 public class DataLoadService {
 
     private final OrderService orderService;
@@ -46,6 +45,33 @@ public class DataLoadService {
     private final UserService userService;
     private final WarehouseService warehouseService;
     private final jakarta.persistence.EntityManager entityManager;
+    
+    // Self-injection for @Transactional to work on internal method calls
+    private DataLoadService self;
+    
+    @org.springframework.beans.factory.annotation.Autowired
+    public DataLoadService(
+            OrderService orderService,
+            AirportService airportService,
+            CustomerService customerService,
+            ProductService productService,
+            UserService userService,
+            WarehouseService warehouseService,
+            jakarta.persistence.EntityManager entityManager) {
+        this.orderService = orderService;
+        this.airportService = airportService;
+        this.customerService = customerService;
+        this.productService = productService;
+        this.userService = userService;
+        this.warehouseService = warehouseService;
+        this.entityManager = entityManager;
+    }
+    
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    public void setSelf(DataLoadService self) {
+        this.self = self;
+    }
 
     /**
      * Update warehouse capacity for newly loaded orders
@@ -70,23 +96,28 @@ public class DataLoadService {
           if (!airports.isEmpty()) {
             // Assume first airport for the city (usually 1:1 for main hubs)
             Airport airport = airports.get(0);
-            if (airport.getWarehouse() != null) {
-              Integer warehouseId = airport.getWarehouse().getId();
-              Warehouse w = warehouseService.getWarehouse(warehouseId);
-              
-              // Check capacity before allocating to avoid Transaction Rollback
-              if (!Boolean.TRUE.equals(w.getIsMainWarehouse())) {
-                  if (w.getUsedCapacity() + count > w.getMaxCapacity()) {
-                      System.err.println("WARNING: Warehouse " + warehouseId + " (City " + cityId + 
-                          ") capacity exceeded. Skipping allocation of " + count + " orders.");
-                      continue;
-                  }
-              }
-
-              warehouseService.allocate(warehouseId, count);
-              System.out.println("Allocated " + count + " orders to warehouse " +
-                  warehouseId + " (City ID: " + cityId + ")");
+            
+            // Skip if airport has no warehouse
+            if (airport.getWarehouse() == null) {
+              System.out.println("  Skipping city " + cityId + " - no warehouse configured");
+              continue;
             }
+            
+            Integer warehouseId = airport.getWarehouse().getId();
+            Warehouse w = warehouseService.getWarehouse(warehouseId);
+              
+            // Check capacity before allocating to avoid Transaction Rollback
+            if (!Boolean.TRUE.equals(w.getIsMainWarehouse())) {
+              if (w.getUsedCapacity() + count > w.getMaxCapacity()) {
+                System.err.println("WARNING: Warehouse " + warehouseId + " (City " + cityId + 
+                    ") capacity exceeded. Skipping allocation of " + count + " orders.");
+                continue;
+              }
+            }
+
+            warehouseService.allocate(warehouseId, count);
+            System.out.println("Allocated " + count + " orders to warehouse " +
+                warehouseId + " (City ID: " + cityId + ")");
           }
         } catch (Exception e) {
           System.err.println("Failed to update capacity for city " + cityId + ": " + e.getMessage());
@@ -147,10 +178,22 @@ public class DataLoadService {
      * @param simulationEndTime Optional: only load orders before this time
      * @return Statistics about loaded orders
      */
-    @Transactional
+    // NOTE: NO @Transactional here - we commit per file to avoid huge transactions
+    // Each file insertion is its own transaction for better memory management
     public LoadOrdersResult loadOrdersFromFiles(String dataDirectoryPath,
                                                 LocalDateTime simulationStartTime,
                                                 LocalDateTime simulationEndTime) {
+        return loadOrdersFromFiles(dataDirectoryPath, simulationStartTime, simulationEndTime, false);
+    }
+    
+    /**
+     * Load orders with optional skip of duplicate check
+     * @param skipDuplicateCheck If true, skips checking for existing orders (use when DB was just cleared)
+     */
+    public LoadOrdersResult loadOrdersFromFiles(String dataDirectoryPath,
+                                                LocalDateTime simulationStartTime,
+                                                LocalDateTime simulationEndTime,
+                                                boolean skipDuplicateCheck) {
 
         System.out.println("========================================");
         System.out.println("LOADING ORDERS FROM FILES TO DATABASE");
@@ -186,20 +229,76 @@ public class DataLoadService {
         }
 
         System.out.println("Found " + orderFiles.length + " order files");
+        System.out.println("Processing files ONE AT A TIME to avoid memory issues");
 
-        // PHASE 1: Parse files and collect unique customer IDs
-        List<ParsedOrderData> parsedOrders = new ArrayList<>();
+        // PHASE 1: Collect all unique customer IDs (lightweight pass)
         Set<String> uniqueCustomerIds = new HashSet<>();
+        
+        System.out.println("\n========================================");
+        System.out.println("PASS 1: SCANNING FOR UNIQUE CUSTOMERS");
+        System.out.println("========================================");
+        
+        for (File orderFile : orderFiles) {
+            String fileName = orderFile.getName();
+            String originAirportCode = fileName
+                .replace("_pedidos_", "")
+                .replace("_.txt", "");
+
+            System.out.println("Scanning: " + fileName);
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(orderFile))) {
+                String line;
+                int lineCount = 0;
+
+                while ((line = reader.readLine()) != null) {
+                    lineCount++;
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+
+                    try {
+                        // Extract only customer ID (lightweight)
+                        String[] parts = line.split("-");
+                        if (parts.length >= 7) {
+                            String customerId = parts[6];
+                            uniqueCustomerIds.add(customerId);
+                        }
+                    } catch (Exception e) {
+                        // Skip parse errors in this pass
+                    }
+                }
+                
+                System.out.println("  Scanned " + lineCount + " lines");
+
+            } catch (Exception e) {
+                result.fileErrors++;
+                System.err.println("Error scanning file " + fileName + ": " + e.getMessage());
+            }
+        }
+
+        // PHASE 2: Batch create customers
+        System.out.println("\n========================================");
+        System.out.println("BATCH CREATING CUSTOMERS");
+        System.out.println("Unique customer IDs found: " + uniqueCustomerIds.size());
+        System.out.println("========================================");
+
+        batchCreateCustomers(uniqueCustomerIds);
+        result.customersCreated = customersCreated;
+
+        // PHASE 3: Process each file individually (streaming mode)
+        System.out.println("\n========================================");
+        System.out.println("PASS 2: LOADING ORDERS FILE BY FILE");
+        System.out.println("========================================");
 
         for (File orderFile : orderFiles) {
             String fileName = orderFile.getName();
-            // Extract airport code from filename: _pedidos_LATI_.txt -> LATI
             String originAirportCode = fileName
                 .replace("_pedidos_", "")
                 .replace("_.txt", "");
 
             System.out.println("\nProcessing file: " + fileName + " (origin: " + originAirportCode + ")");
 
+            List<ParsedOrderData> fileOrders = new ArrayList<>();
+            
             try (BufferedReader reader = new BufferedReader(new FileReader(orderFile))) {
                 String line;
                 int lineNumber = 0;
@@ -221,71 +320,47 @@ public class DataLoadService {
                             }
                         }
 
-                        parsedOrders.add(orderData);
-                        uniqueCustomerIds.add(orderData.customerId);
+                        fileOrders.add(orderData);
                         result.ordersLoaded++;
 
                     } catch (Exception e) {
                         result.parseErrors++;
-                        System.err.println("Error parsing line " + lineNumber + " in " + fileName + ": " + e.getMessage());
+                        System.err.println("Error parsing line " + lineNumber + ": " + e.getMessage());
                     }
                 }
 
-                System.out.println("  Lines processed: " + lineNumber);
+                System.out.println("  Parsed " + fileOrders.size() + " orders from this file");
 
             } catch (Exception e) {
                 result.fileErrors++;
                 System.err.println("Error reading file " + fileName + ": " + e.getMessage());
+                continue;
+            }
+
+            // Insert this file's orders immediately, then clear from memory
+            if (!fileOrders.isEmpty()) {
+                System.out.println("  Inserting " + fileOrders.size() + " orders to database...");
+                
+                try {
+                    // Process this file in a transaction (use self for proxy to work)
+                    int insertedCount = self.processFileInTransaction(fileOrders, result, skipDuplicateCheck);
+                    result.ordersCreated += insertedCount;
+                    
+                    System.out.println("  ✓ Inserted " + insertedCount + " orders");
+                    System.out.println("  Total so far: " + result.ordersCreated + " orders");
+
+                } catch (Exception e) {
+                    System.err.println("  ✗ Error inserting orders: " + e.getMessage());
+                    e.printStackTrace();
+                }
+                
+                // Clear memory after each file
+                fileOrders.clear();
+                System.gc(); // Suggest garbage collection
             }
         }
 
-        // PHASE 2: Batch create customers
-        if (!parsedOrders.isEmpty()) {
-            System.out.println("\n========================================");
-            System.out.println("BATCH CREATING CUSTOMERS");
-            System.out.println("Unique customer IDs found: " + uniqueCustomerIds.size());
-            System.out.println("========================================");
-
-            batchCreateCustomers(uniqueCustomerIds);
-            result.customersCreated = customersCreated;
-        }
-
-        // PHASE 3: Create Order entities with customer references
-        List<Order> ordersToCreate = new ArrayList<>();
-        for (ParsedOrderData orderData : parsedOrders) {
-            try {
-                Order order = buildOrderEntity(orderData);
-                ordersToCreate.add(order);
-            } catch (Exception e) {
-                result.parseErrors++;
-                System.err.println("Error building order entity: " + e.getMessage());
-            }
-        }
-
-        // PHASE 4: Batch insert orders
-        if (!ordersToCreate.isEmpty()) {
-            System.out.println("\n========================================");
-            System.out.println("BATCH INSERTING " + ordersToCreate.size() + " ORDERS TO DATABASE");
-            System.out.println("========================================");
-
-            try {
-                List<Order> createdOrders = orderService.bulkCreateOrders(ordersToCreate);
-                result.ordersCreated = createdOrders.size();
-                result.success = true;
-
-                // Update initial warehouse capacity for the new orders
-                updateInitialWarehouseCapacity(createdOrders);
-
-            } catch (Exception e) {
-                result.success = false;
-                result.errorMessage = "Failed to insert orders: " + e.getMessage();
-                e.printStackTrace();
-            }
-        } else {
-            result.success = false;
-            result.errorMessage = "No orders to insert";
-        }
-
+        result.success = result.ordersCreated > 0;
         result.endTime = LocalDateTime.now();
         result.durationSeconds = java.time.temporal.ChronoUnit.SECONDS.between(result.startTime, result.endTime);
 
@@ -300,6 +375,41 @@ public class DataLoadService {
         System.out.println("========================================");
 
         return result;
+    }
+
+    /**
+     * Process a single file's orders in a transaction
+     * This ensures EntityManager is available for merge operations
+     * NOTE: Must be PUBLIC for @Transactional to work (Spring AOP limitation)
+     */
+    @Transactional
+    public int processFileInTransaction(List<ParsedOrderData> fileOrders, LoadOrdersResult result, boolean skipDuplicateCheck) {
+        List<Order> ordersToCreate = new ArrayList<>();
+        
+        // Build order entities (requires active transaction for merge)
+        for (ParsedOrderData orderData : fileOrders) {
+            try {
+                Order order = buildOrderEntity(orderData);
+                ordersToCreate.add(order);
+            } catch (Exception e) {
+                result.parseErrors++;
+                System.err.println("Error building order entity: " + e.getMessage());
+            }
+        }
+
+        // Bulk insert orders (skip duplicate check if DB was just cleared)
+        List<Order> createdOrders;
+        if (skipDuplicateCheck) {
+            System.out.println("  (skipping duplicate check - DB was cleared)");
+            createdOrders = orderService.bulkCreateOrdersNoDuplicateCheck(ordersToCreate);
+        } else {
+            createdOrders = orderService.bulkCreateOrders(ordersToCreate);
+        }
+        
+        // Update initial warehouse capacity for these orders
+        updateInitialWarehouseCapacity(createdOrders);
+        
+        return createdOrders.size();
     }
 
     /**

@@ -3,6 +3,7 @@ package com.system.morapack.bll.controller;
 import com.system.morapack.bll.service.AlgorithmPersistenceService;
 import com.system.morapack.config.Constants;
 import com.system.morapack.schemas.*;
+import com.system.morapack.schemas.CollapseResultSchema;
 import com.system.morapack.schemas.algorithm.ALNS.Solution;
 import com.system.morapack.schemas.algorithm.TabuSearch.TabuSearch;
 import com.system.morapack.schemas.algorithm.TabuSearch.TabuSolution;
@@ -19,6 +20,9 @@ public class AlgorithmController {
 
   // NEW: Persistence service for batch DB operations
   private final AlgorithmPersistenceService persistenceService;
+  
+  // NEW: Data load service for collapse scenario
+  private final com.system.morapack.bll.service.DataLoadService dataLoadService;
 
   /**
    * Helper class to group flights by route
@@ -481,8 +485,17 @@ public class AlgorithmController {
   /**
    * Filter order splits so only those whose first flight departs after the realtime cursor are
    * persisted. This prevents assigning packages onto departures that already left the hub.
+   * 
+   * NOTE: This filter is DISABLED for Daily Simulation (<= 1 hour windows).
+   * In Daily Simulation, we want to use ALL available flights, not just those
+   * departing within the short time window.
    */
   private boolean shouldApplyRealtimeFilter(AlgorithmRequest request) {
+    // DISABLED for Daily Simulation - we need to use all available flights
+    // Daily Simulation only filters ORDERS by delivery date, not flights by departure time
+    return false;
+    
+    /* OLD LOGIC - Re-enable if needed for other scenarios
     if (request == null) {
       return false;
     }
@@ -493,6 +506,7 @@ public class AlgorithmController {
 
     // Consider realtime windows any slice <= 1 hour
     return request.getSimulationDurationHours() <= 1.0;
+    */
   }
 
   private List<AlgorithmPersistenceService.OrderSplitWithInstances> filterRealtimeEligibleSplits(
@@ -987,5 +1001,191 @@ public class AlgorithmController {
         .score((double) tabuSolution.getScore())
         .productRoutes(productRoutes)
         .build();
+  }
+
+  /**
+   * Execute COLLAPSE SCENARIO: Auto-load ALL orders and run algorithm until saturation
+   * 
+   * Strategy:
+   * 1. Clear existing orders from database
+   * 2. Load ALL orders from _pedidos_*.txt files to database
+   * 3. Execute ALNS algorithm ONCE with all orders
+   * 4. Report how many products were assigned vs unassigned
+   * 5. System collapses when capacity is exhausted (unassigned > 0)
+   * 
+   * Expected execution time: 1-4 hours (as per requirements)
+   */
+  public CollapseResultSchema executeCollapseScenario(AlgorithmRequest request) {
+    LocalDateTime executionStartTime = LocalDateTime.now();
+    
+    System.out.println("===========================================");
+    System.out.println("EXECUTING COLLAPSE SCENARIO");
+    System.out.println("Auto-loading ALL orders and running until saturation");
+    System.out.println("===========================================");
+    
+    LocalDateTime simStart = request.getSimulationStartTime();
+    // Use very large timeframe (10 years) to capture ALL orders from database
+    LocalDateTime simEnd = simStart.plusYears(10);
+    
+    boolean hasCollapsed = false;
+    String collapseReason = "NONE";
+    
+    try {
+      // STEP 1: Clear existing orders from database
+      System.out.println("\n=== STEP 1: CLEARING EXISTING ORDERS ===");
+      dataLoadService.clearAllOrders();
+      System.out.println("Database cleared successfully");
+      
+      // STEP 2: Load ALL orders from files to database
+      System.out.println("\n=== STEP 2: LOADING ALL ORDERS FROM FILES ===");
+      System.out.println("Data directory: " + com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY);
+      System.out.println("Loading ALL orders (no time filtering)...");
+      
+      com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
+          dataLoadService.loadOrdersFromFiles(
+              com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
+              null, // No start time filter - load ALL
+              null, // No end time filter - load ALL
+              true  // Skip duplicate check - DB was just cleared
+          );
+      
+      if (!loadResult.success) {
+        throw new RuntimeException("Failed to load orders: " + loadResult.errorMessage);
+      }
+      
+      System.out.println("Orders loaded successfully:");
+      System.out.println("  - Orders created: " + loadResult.ordersCreated);
+      System.out.println("  - Customers created: " + loadResult.customersCreated);
+      System.out.println("  - Duration: " + loadResult.durationSeconds + " seconds");
+      
+      // STEP 3: Execute ALNS with FULL timeframe (loads all orders from DATABASE)
+      System.out.println("\n=== STEP 3: EXECUTING ALNS ALGORITHM ===");
+      System.out.println("Time window: " + simStart + " to " + simEnd);
+      System.out.println("This may take 1-4 hours depending on data volume...");
+      
+      Solution alnsSolution = new Solution(simStart, simEnd);
+      alnsSolution.solve();
+      
+      System.out.println("\n=== ALGORITHM COMPLETED ===");
+      
+      // Get solution results
+      Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
+      
+      int assignedProducts = 0;
+      int unassignedProducts = 0;
+      int totalOrders = 0;
+      
+      if (productSolution != null) {
+        for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
+          if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+            assignedProducts++;
+          } else {
+            unassignedProducts++;
+          }
+        }
+        totalOrders = productSolution.size();
+      }
+      
+      // Also count products from order splits (more accurate)
+      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      if (orderSplits != null && !orderSplits.isEmpty()) {
+        int splitAssigned = 0;
+        int splitTotal = 0;
+        
+        for (List<Solution.OrderSplitInfo> splits : orderSplits.values()) {
+          for (Solution.OrderSplitInfo split : splits) {
+            splitTotal += split.quantity;
+            if (split.assignedRoute != null && !split.assignedRoute.isEmpty()) {
+              splitAssigned += split.quantity;
+            }
+          }
+        }
+        
+        if (splitTotal > 0) {
+          assignedProducts = splitAssigned;
+          unassignedProducts = splitTotal - splitAssigned;
+        }
+      }
+      
+      int totalProducts = assignedProducts + unassignedProducts;
+      
+      // Determine collapse status
+      if (unassignedProducts > 0) {
+        hasCollapsed = true;
+        collapseReason = "CAPACITY_EXHAUSTED";
+        System.out.println("\n!!! SYSTEM COLLAPSED !!!");
+        System.out.println("System reached capacity limits");
+        System.out.println(unassignedProducts + " products could not be assigned");
+      } else {
+        hasCollapsed = false;
+        collapseReason = "NO_COLLAPSE";
+        System.out.println("\n=== NO COLLAPSE ===");
+        System.out.println("All products were successfully assigned");
+      }
+      
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
+      
+      double unassignedPercentage = totalProducts > 0 
+          ? (unassignedProducts * 100.0) / totalProducts 
+          : 0.0;
+      
+      System.out.println("\n===========================================");
+      System.out.println("COLLAPSE SCENARIO RESULTS");
+      System.out.println("Has collapsed: " + hasCollapsed);
+      System.out.println("Collapse reason: " + collapseReason);
+      System.out.println("Total orders: " + totalOrders);
+      System.out.println("Total products: " + totalProducts);
+      System.out.println("Assigned: " + assignedProducts + " (" + String.format("%.1f", 100 - unassignedPercentage) + "%)");
+      System.out.println("Unassigned: " + unassignedProducts + " (" + String.format("%.1f", unassignedPercentage) + "%)");
+      System.out.println("Execution time: " + executionTime + " seconds (" + (executionTime / 60) + " minutes)");
+      System.out.println("===========================================\n");
+      
+      return CollapseResultSchema.builder()
+          .success(true)
+          .message(hasCollapsed 
+              ? "System collapsed: " + unassignedProducts + " products could not be assigned due to capacity limits"
+              : "Simulation completed: All " + assignedProducts + " products were successfully assigned")
+          .hasCollapsed(hasCollapsed)
+          .collapseDay(hasCollapsed ? 1 : 0)
+          .collapseTime(hasCollapsed ? simStart : null)
+          .collapseReason(collapseReason)
+          .executionStartTime(executionStartTime)
+          .executionEndTime(executionEndTime)
+          .executionTimeSeconds(executionTime)
+          .simulationStartTime(simStart)
+          .totalDaysSimulated(1)
+          .totalOrdersProcessed(totalOrders)
+          .totalProductsProcessed(totalProducts)
+          .assignedProducts(assignedProducts)
+          .unassignedProducts(unassignedProducts)
+          .unassignedPercentage(unassignedPercentage)
+          .dailyStatistics(null) // No daily breakdown for single-run collapse
+          .build();
+          
+    } catch (Exception e) {
+      LocalDateTime executionEndTime = LocalDateTime.now();
+      System.out.println("\n!!! COLLAPSE SCENARIO FAILED !!!");
+      System.out.println("Error: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseResultSchema.builder()
+          .success(false)
+          .message("Collapse scenario failed: " + e.getMessage())
+          .hasCollapsed(true)
+          .collapseDay(1)
+          .collapseTime(simStart)
+          .collapseReason("ERROR")
+          .executionStartTime(executionStartTime)
+          .executionEndTime(executionEndTime)
+          .executionTimeSeconds(ChronoUnit.SECONDS.between(executionStartTime, executionEndTime))
+          .simulationStartTime(simStart)
+          .totalDaysSimulated(1)
+          .totalOrdersProcessed(0)
+          .totalProductsProcessed(0)
+          .assignedProducts(0)
+          .unassignedProducts(0)
+          .build();
+    }
   }
 }

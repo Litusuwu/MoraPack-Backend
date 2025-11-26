@@ -43,7 +43,11 @@ public class OrderAPI {
 
   @PostMapping
   public ResponseEntity<OrderSchema> createOrder(@RequestBody OrderSchema order) {
-    return ResponseEntity.ok(orderController.createOrder(order));
+    try {
+      return ResponseEntity.ok(orderController.createOrder(order));
+    } catch (Exception e) {
+      throw new IllegalArgumentException("Error al crear la orden: " + e.getMessage(), e);
+    }
   }
 
   @PostMapping("/bulk")
@@ -53,7 +57,11 @@ public class OrderAPI {
 
   @PutMapping("/{id}")
   public ResponseEntity<OrderSchema> updateOrder(@PathVariable Integer id, @RequestBody OrderSchema updates) {
-    return ResponseEntity.ok(orderController.updateOrder(id, updates));
+    try {
+      return ResponseEntity.ok(orderController.updateOrder(id, updates));
+    } catch (Exception e) {
+      throw new IllegalArgumentException("Error al actualizar la orden: " + e.getMessage(), e);
+    }
   }
 
   @PatchMapping("/{id}/status")

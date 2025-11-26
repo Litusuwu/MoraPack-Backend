@@ -34,15 +34,24 @@ public class DataSourceFactory {
     }
 
     /**
-     * Creates an InputDataSource based on Constants.DATA_SOURCE_MODE.
+     * Creates an InputDataSource based on effective data source mode.
+     * Checks DataSourceOverride first, then falls back to Constants.DATA_SOURCE_MODE.
      * Falls back to FILE mode if DATABASE mode is selected but Spring context is unavailable.
      *
      * @return InputDataSource implementation (FileInputDataSource or DatabaseInputDataSource)
      */
     public static InputDataSource createDataSource() {
-        System.out.println("[FACTORY] Creating data source for mode: " + Constants.DATA_SOURCE_MODE);
+        // Check for override first
+        com.system.morapack.config.Constants.DataSourceMode effectiveMode = 
+            com.system.morapack.config.DataSourceOverride.getEffectiveMode();
+        
+        if (com.system.morapack.config.DataSourceOverride.hasOverride()) {
+            System.out.println("[FACTORY] Using OVERRIDDEN data source mode: " + effectiveMode);
+        } else {
+            System.out.println("[FACTORY] Creating data source for mode: " + effectiveMode);
+        }
 
-        switch (Constants.DATA_SOURCE_MODE) {
+        switch (effectiveMode) {
             case FILE:
                 System.out.println("[FACTORY] Using FILE-based data source (data/ directory)");
                 return new FileInputDataSource();
@@ -58,7 +67,7 @@ public class DataSourceFactory {
                 }
 
             default:
-                System.err.println("[FACTORY] Unknown data source mode: " + Constants.DATA_SOURCE_MODE);
+                System.err.println("[FACTORY] Unknown data source mode: " + effectiveMode);
                 System.err.println("[FACTORY] Falling back to FILE mode");
                 return new FileInputDataSource();
         }

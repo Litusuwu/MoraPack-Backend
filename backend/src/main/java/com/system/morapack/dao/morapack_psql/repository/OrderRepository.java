@@ -16,6 +16,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
   Optional<Order> findFirstByName(String name);
   List<Order> findByName(String name);
+  List<Order> findByNameIn(List<String> names);
   List<Order> findByCustomer_Id(Integer customerId);
   List<Order> findByStatus(PackageStatus status);
   List<Order> findByDeliveryDateBetween(LocalDateTime start, LocalDateTime end);
