@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -100,6 +101,98 @@ public class DataLoadAPI {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "Failed to load orders: " + e.getMessage());
+            errorResponse.put("error", e.getClass().getSimpleName());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
+     * Load orders for Daily Simulation with automatic cleanup and 10-minute timeframe
+     * 
+     * This endpoint is optimized for Daily Simulation:
+     * - Automatically clears old orders/products before loading
+     * - Loads orders within a 10-minute window from startTime
+     * - Returns detailed statistics for UI feedback
+     * 
+     * Example: POST /api/data/load-for-daily?startTime=2025-01-02T00:00:00
+     * 
+     * @param startTimeStr Required: Start time of the simulation (ISO format string)
+     * @return Statistics about the data loading process
+     */
+    @PostMapping("/load-for-daily")
+    public ResponseEntity<Map<String, Object>> loadForDailySimulation(
+            @RequestParam String startTime) {
+
+        try {
+            System.out.println("========================================");
+            System.out.println("API: LOAD FOR DAILY SIMULATION");
+            System.out.println("Received startTime param: " + startTime);
+            System.out.println("========================================");
+
+            // Parse startTime (handle various formats including timezone)
+            LocalDateTime parsedStartTime;
+            try {
+                // Remove timezone suffix if present (.000Z or Z)
+                String cleanedTime = startTime.replaceAll("\\.\\d{3}Z$", "").replaceAll("Z$", "");
+                parsedStartTime = LocalDateTime.parse(cleanedTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                System.out.println("Parsed start time: " + parsedStartTime);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid date format. Expected ISO 8601 format (e.g., 2025-01-02T00:00:00): " + e.getMessage());
+            }
+
+            // Calculate end time: startTime + 10 minutes (fixed timeframe)
+            final int TIMEFRAME_MINUTES = 10;
+            LocalDateTime endTime = parsedStartTime.plusMinutes(TIMEFRAME_MINUTES);
+
+            System.out.println("Time Window: " + parsedStartTime + " to " + endTime);
+
+            // Step 1: Clear all existing orders and products for clean start
+            System.out.println("Clearing existing orders and products...");
+            dataLoadService.clearAllOrders();
+            System.out.println("✓ Old data cleared");
+
+            // Step 2: Load orders within timeframe
+            System.out.println("Loading orders from files...");
+            String dirPath = getDefaultDataDirectory();
+            DataLoadService.LoadOrdersResult result =
+                dataLoadService.loadOrdersFromFiles(dirPath, parsedStartTime, endTime);
+
+            // Step 3: Build response
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", result.success);
+            response.put("message", result.success ?
+                "Data loaded successfully for daily simulation" : result.errorMessage);
+            
+            // Statistics
+            Map<String, Object> statistics = new HashMap<>();
+            statistics.put("ordersLoaded", result.ordersLoaded);
+            statistics.put("ordersCreated", result.ordersCreated);
+            statistics.put("ordersFiltered", result.ordersFiltered);
+            statistics.put("customersCreated", result.customersCreated);
+            statistics.put("parseErrors", result.parseErrors);
+            statistics.put("fileErrors", result.fileErrors);
+            statistics.put("durationSeconds", result.durationSeconds);
+            response.put("statistics", statistics);
+
+            // Time window info
+            response.put("timeWindow", Map.of(
+                "startTime", parsedStartTime.toString(),
+                "endTime", endTime.toString(),
+                "durationMinutes", TIMEFRAME_MINUTES
+            ));
+
+            System.out.println("✓ Loaded " + result.ordersCreated + " orders");
+            System.out.println("========================================");
+
+            return result.success ?
+                ResponseEntity.ok(response) :
+                ResponseEntity.internalServerError().body(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to load data for daily simulation: " + e.getMessage());
             errorResponse.put("error", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body(errorResponse);
         }

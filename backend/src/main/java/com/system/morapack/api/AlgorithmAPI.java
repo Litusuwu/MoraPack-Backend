@@ -3,6 +3,7 @@ package com.system.morapack.api;
 import com.system.morapack.bll.controller.AlgorithmController;
 import com.system.morapack.schemas.AlgorithmRequest;
 import com.system.morapack.schemas.AlgorithmResultSchema;
+import com.system.morapack.schemas.CollapseResultSchema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -193,6 +194,41 @@ public class AlgorithmAPI {
         .build();
 
     AlgorithmResultSchema result = algorithmController.executeAlgorithm(request);
+
+    if (result.getSuccess()) {
+      return ResponseEntity.ok(result);
+    } else {
+      return ResponseEntity.internalServerError().body(result);
+    }
+  }
+
+  /**
+   * COLLAPSE SCENARIO: Execute ALNS with ALL available orders until saturation
+   * POST /api/algorithm/collapse
+   *
+   * Request body example:
+   * {
+   *   "simulationStartTime": "2025-01-01T00:00:00",
+   *   "useDatabase": true
+   * }
+   *
+   * This endpoint loads ALL orders from data files and executes ALNS once:
+   * - Loads ALL orders (1 year timeframe captures all data files)
+   * - Executes algorithm until capacity exhausted
+   * - Reports assigned vs unassigned products
+   * - Expected execution time: 1-4 hours
+   * 
+   * Returns collapse point and statistics when system reaches saturation
+   */
+  @PostMapping("/collapse")
+  public ResponseEntity<CollapseResultSchema> executeCollapse(
+      @RequestBody AlgorithmRequest request) {
+
+    if (request == null || request.getSimulationStartTime() == null) {
+      return ResponseEntity.badRequest().build();
+    }
+
+    CollapseResultSchema result = algorithmController.executeCollapseScenario(request);
 
     if (result.getSuccess()) {
       return ResponseEntity.ok(result);

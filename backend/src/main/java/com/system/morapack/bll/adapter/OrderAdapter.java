@@ -43,26 +43,48 @@ public class OrderAdapter {
   }
 
   private Order mapToEntity(OrderSchema schema) {
+    LocalDateTime now = LocalDateTime.now();
     Order.OrderBuilder builder = Order.builder()
         .id(schema.getId())
         .name(schema.getName())
         .deliveryDate(schema.getDeliveryDate())
         .status(schema.getStatus() != null ? schema.getStatus() : PackageStatus.PENDING)
-        .pickupTimeHours(schema.getPickupTimeHours());
+        .pickupTimeHours(schema.getPickupTimeHours())
+        .creationDate(schema.getCreationDate() != null ? schema.getCreationDate() : now)
+        .updatedAt(schema.getUpdatedAt() != null ? schema.getUpdatedAt() : now);
 
     if (schema.getOriginCityId() != null) {
-      City origin = cityService.getCity(schema.getOriginCityId());
-      builder.origin(origin);
+      try {
+        City origin = cityService.getCity(schema.getOriginCityId());
+        builder.origin(origin);
+      } catch (Exception e) {
+        throw new IllegalArgumentException("No se encontró la ciudad de origen con ID: " + schema.getOriginCityId());
+      }
     }
 
     if (schema.getDestinationCityId() != null) {
-      City destination = cityService.getCity(schema.getDestinationCityId());
-      builder.destination(destination);
+      try {
+        City destination = cityService.getCity(schema.getDestinationCityId());
+        builder.destination(destination);
+      } catch (Exception e) {
+        throw new IllegalArgumentException("No se encontró la ciudad de destino con ID: " + schema.getDestinationCityId());
+      }
     }
 
     if (schema.getCustomerId() != null) {
-      Customer customer = customerService.getCustomer(schema.getCustomerId());
-      builder.customer(customer);
+      try {
+        Customer customer = customerService.getCustomer(schema.getCustomerId());
+        builder.customer(customer);
+      } catch (Exception e) {
+        throw new IllegalArgumentException("No se encontró el cliente con ID: " + schema.getCustomerId());
+      }
+    } else if (schema.getCustomerSchema() != null && schema.getCustomerSchema().getId() != null) {
+      try {
+        Customer customer = customerService.getCustomer(schema.getCustomerSchema().getId());
+        builder.customer(customer);
+      } catch (Exception e) {
+        throw new IllegalArgumentException("No se encontró el cliente con ID: " + schema.getCustomerSchema().getId());
+      }
     }
 
     return builder.build();

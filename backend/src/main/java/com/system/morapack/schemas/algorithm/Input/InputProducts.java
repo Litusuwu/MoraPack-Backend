@@ -152,9 +152,9 @@ public class InputProducts {
             return orderSchemas;
         }
 
-        // Find all files matching _pedidos_{AIRPORT}_
+        // Find all files matching _pedidos_{AIRPORT}_.txt or _pedidos_{AIRPORT}_
         File[] orderFiles = dataDir.listFiles((dir, name) ->
-            name.startsWith("_pedidos_") && name.endsWith("_"));
+            name.startsWith("_pedidos_") && (name.endsWith("_.txt") || name.endsWith("_")));
 
         if (orderFiles == null || orderFiles.length == 0) {
             System.err.println("WARNING: No order files found in " + dataDirectoryPath);
@@ -180,9 +180,9 @@ public class InputProducts {
         // Read each order file
         for (File orderFile : orderFiles) {
             // Extract airport code from filename (represents destination hub)
-            // Example: _pedidos_EBCI_ -> EBCI
+            // Example: _pedidos_EBCI_.txt or _pedidos_EBCI_ -> EBCI
             String fileName = orderFile.getName();
-            String fileAirportCode = fileName.replace("_pedidos_", "").replace("_", "");
+            String fileAirportCode = fileName.replace("_pedidos_", "").replace("_.txt", "").replace("_", "");
 
             AirportSchema fileAirport = airportMap.get(fileAirportCode);
             if (fileAirport == null) {
