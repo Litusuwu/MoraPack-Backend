@@ -25,6 +25,22 @@ public class SimulationAPI {
 
     private final SimulationTimeService simulationTimeService;
 
+    public static class CapacityStats {
+        private double usedCapacity;
+        private double totalCapacity;
+        private double averageUtilization;
+
+        public CapacityStats(double usedCapacity, double totalCapacity) {
+            this.usedCapacity = usedCapacity;
+            this.totalCapacity = totalCapacity;
+            this.averageUtilization = totalCapacity > 0 ? usedCapacity / totalCapacity : 0;
+        }
+
+        public double getUsedCapacity() { return usedCapacity; }
+        public double getTotalCapacity() { return totalCapacity; }
+        public double getAverageUtilization() { return averageUtilization; }
+    }
+
     /**
      * Actualiza estados de productos basándose en el tiempo de simulación
      *
@@ -55,6 +71,12 @@ public class SimulationAPI {
         SimulationTimeService.SimulationUpdateStats stats =
             simulationTimeService.updateProductStates(request.getCurrentTime());
 
+        // NUEVO: capacidad promedio en tiempo real
+        SimulationAPI.CapacityStats capacityStats =
+                simulationTimeService.calculateCapacityStats();
+
+
+
         // Construir respuesta
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
@@ -64,6 +86,12 @@ public class SimulationAPI {
             "inTransitToArrived", stats.getInTransitToArrived(),
             "arrivedToDelivered", stats.getArrivedToDelivered(),
             "total", stats.getTotalTransitions()
+        ));
+
+        response.put("capacityStats", Map.of(
+                "usedCapacity", capacityStats.getUsedCapacity(),
+                "totalCapacity", capacityStats.getTotalCapacity(),
+                "averageUtilization", capacityStats.getAverageUtilization()
         ));
 
         return ResponseEntity.ok(response);
@@ -174,4 +202,8 @@ public class SimulationAPI {
             this.hoursToAdvance = hoursToAdvance;
         }
     }
+
+
+
+
 }

@@ -29,4 +29,9 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
   @Modifying
   @Query("DELETE FROM Product p WHERE p.id IN :ids")
   void deleteAllByIdIn(List<Integer> ids);
+
+  @Query("SELECT COALESCE(SUM(p.weight), 0) FROM Product p WHERE p.assignedFlightInstance IS NOT NULL")
+  double sumUsedCapacity();
+
+
 }

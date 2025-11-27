@@ -33,4 +33,9 @@ public interface FlightRepository extends JpaRepository<Flight, Integer> {
   @Modifying
   @Query("DELETE FROM Flight f WHERE f.id IN :ids")
   void deleteAllByIdIn(List<Integer> ids);
+
+  @Query("SELECT COALESCE(SUM(f.maxCapacity), 0) FROM Flight f")
+  double sumTotalCapacity();
+
+
 }

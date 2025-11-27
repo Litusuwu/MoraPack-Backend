@@ -1,9 +1,12 @@
 package com.system.morapack.bll.service;
 
+import com.system.morapack.api.SimulationAPI;
 import com.system.morapack.dao.morapack_psql.model.Flight;
 import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.Product;
 import com.system.morapack.dao.morapack_psql.model.ProductFlight;
+import com.system.morapack.dao.morapack_psql.repository.FlightRepository;
+import com.system.morapack.dao.morapack_psql.repository.ProductRepository;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
@@ -34,6 +37,8 @@ public class SimulationTimeService {
     private final OrderService orderService;
     private final WarehouseService warehouseService;
     private final AirportRepository airportRepository;
+    private final ProductRepository productRepository;
+    private final FlightRepository flightRepository;
 
     /**
      * Actualiza estados de productos basándose en el tiempo actual de simulación
@@ -348,4 +353,13 @@ public class SimulationTimeService {
         public int getInTransitToArrived() { return inTransitToArrived; }
         public int getArrivedToDelivered() { return arrivedToDelivered; }
     }
+
+    public SimulationAPI.CapacityStats calculateCapacityStats() {
+
+        double used = productRepository.sumUsedCapacity();
+        double total = flightRepository.sumTotalCapacity();
+
+        return new SimulationAPI.CapacityStats(used, total);
+    }
+
 }
