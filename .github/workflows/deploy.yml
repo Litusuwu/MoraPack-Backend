@@ -17,7 +17,7 @@ jobs:
           port: 22
           script: |
             
-            cd ~/MoraPack/MoraPack-Backend
+            cd ~/MoraPack/MoraPack-Backend/backend
             
             
             git pull origin main
@@ -31,4 +31,4 @@ jobs:
             make set-up-db
             nohup make run > backend.log 2>&1 &
             
-            echo "Despliegue Backend completado 🚀"
+            echo "Despliegue Backend completado "
