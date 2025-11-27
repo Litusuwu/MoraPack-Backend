@@ -1,0 +1,35 @@
+# Railway Ignore File
+# Archivos y directorios que no necesitan subirse al deploy
+
+# IDEs
+.idea/
+.vscode/
+.claude/
+*.iml
+*.ipr
+*.iws
+
+# Build artifacts locales
+backend/target/
+
+# Documentación y contexto (no necesarios en producción)
+context/
+FRONTEND_WORKFLOW.md
+
+# Docker compose (no se usa en Railway)
+backend/compose.yaml
+
+# Logs y archivos de prueba
+backend/*.log
+backend/test_*.py
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
