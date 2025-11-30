@@ -57,4 +57,8 @@ public class Order {
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "customer_id", nullable = false)
   private Customer customer;
+
+  // Bidirectional relationship: Order -> Products
+  @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
+  private java.util.List<Product> products;
 }

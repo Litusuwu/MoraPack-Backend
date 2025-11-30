@@ -7,6 +7,7 @@ import com.system.morapack.dao.morapack_psql.model.Product;
 import com.system.morapack.dao.morapack_psql.model.ProductFlight;
 import com.system.morapack.dao.morapack_psql.repository.FlightRepository;
 import com.system.morapack.dao.morapack_psql.repository.ProductRepository;
+import com.system.morapack.dao.morapack_psql.repository.OrderRepository;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.List;
+import java.util.*;
 
 /**
  * Service para simular el paso del tiempo y actualizar estados de productos
@@ -38,7 +39,12 @@ public class SimulationTimeService {
     private final WarehouseService warehouseService;
     private final AirportRepository airportRepository;
     private final ProductRepository productRepository;
+    private final OrderRepository orderRepository;
     private final FlightRepository flightRepository;
+
+    // Cache for capacity stats to avoid expensive aggregations on every call
+    private SimulationAPI.CapacityStats cachedCapacityStats = null;
+    private LocalDateTime lastCapacityCalculation = null;
 
     /**
      * Actualiza estados de productos basándose en el tiempo actual de simulación
@@ -55,21 +61,38 @@ public class SimulationTimeService {
 
         SimulationUpdateStats stats = new SimulationUpdateStats();
 
-        // Obtener todos los productos que tienen vuelos asignados
-        List<Product> allProducts = productService.fetchProducts(null);
+        // OPTIMIZATION: Load only active products (not DELIVERED) with their orders in one query
+        List<Product> activeProducts = productRepository.findByStatusIn(
+            Arrays.asList(PackageStatus.PENDING, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
+        );
 
-        for (Product product : allProducts) {
+        System.out.println("Active products to check: " + activeProducts.size());
+
+        // OPTIMIZATION: Collect products to update by new status (for batch update)
+        Map<PackageStatus, List<Integer>> productUpdates = new HashMap<>();
+        productUpdates.put(PackageStatus.IN_TRANSIT, new ArrayList<>());
+        productUpdates.put(PackageStatus.ARRIVED, new ArrayList<>());
+        productUpdates.put(PackageStatus.DELIVERED, new ArrayList<>());
+
+        for (Product product : activeProducts) {
             PackageStatus oldStatus = product.getStatus();
             PackageStatus newStatus = calculateProductStatus(product, currentSimulationTime);
 
             if (oldStatus != newStatus) {
-                product.setStatus(newStatus);
-                productService.save(product);
-
+                productUpdates.get(newStatus).add(product.getId());
                 stats.recordTransition(oldStatus, newStatus);
 
                 System.out.println("Product " + product.getId() + ": " +
                                  oldStatus + " → " + newStatus);
+            }
+        }
+
+        // OPTIMIZATION: Batch update all products at once (3 queries instead of N)
+        for (Map.Entry<PackageStatus, List<Integer>> entry : productUpdates.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                productRepository.batchUpdateStatus(entry.getKey(), entry.getValue());
+                System.out.println("Batch updated " + entry.getValue().size() +
+                                 " products to " + entry.getKey());
             }
         }
 
@@ -211,12 +234,19 @@ public class SimulationTimeService {
 
     /**
      * Actualiza estados de órdenes basándose en estados de sus productos
+     * OPTIMIZATION: Uses JOIN FETCH to load orders with products in one query (prevents N+1)
      */
     private void updateOrderStates() {
-        List<Order> allOrders = orderService.fetchOrders(null);
+        // OPTIMIZATION: Load only active orders WITH products in ONE query (no N+1)
+        List<Order> activeOrders = orderRepository.findByStatusInWithProducts(
+            Arrays.asList(PackageStatus.PENDING, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
+        );
 
-        for (Order order : allOrders) {
-            PackageStatus orderStatus = calculateOrderStatus(order);
+        System.out.println("Active orders to check: " + activeOrders.size());
+
+        for (Order order : activeOrders) {
+            // OPTIMIZATION: Products already loaded via JOIN FETCH - no extra query!
+            PackageStatus orderStatus = calculateOrderStatusFromLoadedProducts(order);
 
             if (order.getStatus() != orderStatus) {
               // Actualizar capacidad de almacenes antes de cambiar el estado
@@ -278,10 +308,53 @@ public class SimulationTimeService {
     }
 
     /**
-     * Calcula estado de orden basándose en sus productos
+     * Calcula estado de orden basándose en sus productos ya cargados
+     * OPTIMIZATION: Uses already-loaded products from JOIN FETCH (no DB query)
      */
+    private PackageStatus calculateOrderStatusFromLoadedProducts(Order order) {
+        // OPTIMIZATION: Products already loaded via JOIN FETCH
+        List<Product> products = order.getProducts();
+
+        if (products == null || products.isEmpty()) {
+            return PackageStatus.PENDING;
+        }
+
+        boolean allDelivered = true;
+        boolean anyInTransit = false;
+        boolean anyArrived = false;
+
+        for (Product product : products) {
+            PackageStatus status = product.getStatus();
+
+            if (status != PackageStatus.DELIVERED) {
+                allDelivered = false;
+            }
+            if (status == PackageStatus.IN_TRANSIT) {
+                anyInTransit = true;
+            }
+            if (status == PackageStatus.ARRIVED) {
+                anyArrived = true;
+            }
+        }
+
+        if (allDelivered) {
+            return PackageStatus.DELIVERED;
+        } else if (anyArrived) {
+            return PackageStatus.ARRIVED;
+        } else if (anyInTransit) {
+            return PackageStatus.IN_TRANSIT;
+        } else {
+            return PackageStatus.PENDING;
+        }
+    }
+
+    /**
+     * Calcula estado de orden basándose en sus productos (legacy method, fetches from DB)
+     * @deprecated Use calculateOrderStatusFromLoadedProducts when products are already loaded
+     */
+    @Deprecated
     private PackageStatus calculateOrderStatus(Order order) {
-        // Obtener productos de la orden
+        // Obtener productos de la orden (DB query)
         List<Product> products = productService.getProductsByOrder(order.getId());
 
         if (products == null || products.isEmpty()) {
@@ -354,12 +427,29 @@ public class SimulationTimeService {
         public int getArrivedToDelivered() { return arrivedToDelivered; }
     }
 
+    /**
+     * Calculate capacity statistics with caching to improve performance
+     * OPTIMIZATION: Caches results for 5 minutes to avoid expensive aggregations on every call
+     */
     public SimulationAPI.CapacityStats calculateCapacityStats() {
+        LocalDateTime now = LocalDateTime.now();
 
+        // OPTIMIZATION: Only recalculate every 5 minutes
+        if (cachedCapacityStats != null && lastCapacityCalculation != null &&
+            lastCapacityCalculation.plusMinutes(5).isAfter(now)) {
+            System.out.println("Using cached capacity stats (age: " +
+                java.time.Duration.between(lastCapacityCalculation, now).toSeconds() + "s)");
+            return cachedCapacityStats;
+        }
+
+        System.out.println("Calculating fresh capacity stats...");
         double used = productRepository.sumUsedCapacity();
         double total = flightRepository.sumTotalCapacity();
 
-        return new SimulationAPI.CapacityStats(used, total);
+        cachedCapacityStats = new SimulationAPI.CapacityStats(used, total);
+        lastCapacityCalculation = now;
+
+        return cachedCapacityStats;
     }
 
 }
