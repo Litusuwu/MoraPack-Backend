@@ -1,7 +1,6 @@
 package com.system.morapack.api;
 
 import com.system.morapack.bll.controller.FlightController;
-import com.system.morapack.bll.dto.FlightInstanceDTO;
 import com.system.morapack.schemas.FlightSchema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -9,9 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/flights")
@@ -103,31 +100,4 @@ public class FlightAPI {
     }
     return ResponseEntity.ok(flightController.countAllFlights());
   }
-
-  @GetMapping("/instances")
-  public ResponseEntity<?> getFlightInstancesForWeek(
-          @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
-          @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate
-  ) {
-    System.out.println("\n========================================");
-    System.out.println("API: GET FLIGHT INSTANCES");
-    System.out.println("Start: " + startDate);
-    System.out.println("End: " + endDate);
-    System.out.println("========================================\n");
-
-    // Obtener instancias desde el controller
-    List<FlightInstanceDTO> instances = flightController.getFlightInstances(startDate, endDate);
-
-    Map<String, Object> response = new HashMap<>();
-    response.put("success", true);
-    response.put("totalInstances", instances.size());
-    response.put("instances", instances);
-    response.put("timeRange", Map.of(
-            "start", startDate,
-            "end", endDate
-    ));
-
-    return ResponseEntity.ok(response);
-  }
-
 }

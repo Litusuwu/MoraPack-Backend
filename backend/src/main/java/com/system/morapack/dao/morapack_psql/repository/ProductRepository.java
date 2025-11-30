@@ -7,7 +7,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.repository.query.Param;
 
@@ -33,18 +32,6 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
 
   @Query("SELECT COALESCE(SUM(p.weight), 0) FROM Product p WHERE p.assignedFlightInstance IS NOT NULL")
   double sumUsedCapacity();
-
-  @Query("""
-    SELECT p FROM Product p 
-    JOIN FETCH p.order o 
-    WHERE o.creationDate BETWEEN :startDate AND :endDate 
-    AND p.assignedFlightInstance IS NOT NULL
-    ORDER BY o.creationDate
-    """)
-  List<Product> findProductsWithFlightInTimeRange(
-          @Param("startDate") LocalDateTime startDate,
-          @Param("endDate") LocalDateTime endDate
-  );
 
 
 }
