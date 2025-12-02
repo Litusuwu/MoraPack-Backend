@@ -161,8 +161,14 @@ public class AlgorithmPersistenceService {
                 List<ProductFlight> productFlights = new ArrayList<>();
                 int sequenceOrder = 1;
                 for (FlightSchema flightSchema : split.getAssignedFlights()) {
-                    // Fetch the Flight entity from database
-                    Flight flight = flightService.get(flightSchema.getId());
+                    // FIX: Fetch the Flight entity from database by CODE (not ID)
+                    // The FlightSchema ID is in-memory and doesn't match DB IDs
+                    Flight flight = flightService.getFlightByCode(flightSchema.getCode());
+
+                    if (flight == null) {
+                        System.err.println("WARNING: Flight not found in DB with code: " + flightSchema.getCode());
+                        continue;
+                    }
 
                     // Create ProductFlight junction record
                     ProductFlight productFlight = ProductFlight.builder()
@@ -352,8 +358,15 @@ public class AlgorithmPersistenceService {
                 List<ProductFlight> productFlights = new ArrayList<>();
                 int sequenceOrder = 1;
                 for (FlightInstanceSchema instanceSchema : split.getAssignedFlightInstances()) {
-                    // Get base flight entity
-                    Flight flight = flightService.get(instanceSchema.getBaseFlightId());
+                    // FIX: Get base flight entity by CODE (not ID)
+                    // The baseFlightId is in-memory and doesn't match DB IDs
+                    String flightCode = instanceSchema.getBaseFlight().getCode();
+                    Flight flight = flightService.getFlightByCode(flightCode);
+
+                    if (flight == null) {
+                        System.err.println("WARNING: Flight not found in DB with code: " + flightCode);
+                        continue;
+                    }
 
                     // Create ProductFlight junction record
                     ProductFlight productFlight = ProductFlight.builder()
