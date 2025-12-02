@@ -16,6 +16,7 @@ import java.util.Random;
 import java.util.PriorityQueue;
 import java.util.Comparator;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 
 public class Solution {
@@ -440,29 +441,26 @@ public class Solution {
         for (int i = 0; i < route.size(); i++) {
             FlightSchema flight = route.get(i);
 
-            // Calculate the next available departure after current time
-            // Assume flights depart every 24/dailyFrequency hours
-            Integer dailyFrequency = flight.getDailyFrequency();
-            if (dailyFrequency == null || dailyFrequency <= 0) {
-                dailyFrequency = 1; // Default to once per day
+            // Get the real departure time from the flight (from flights.txt)
+            LocalTime flightDepartureTime = flight.getDepartureTime();
+            if (flightDepartureTime == null) {
+                // Fallback to default if not available
+                flightDepartureTime = LocalTime.of(0, 0);
             }
 
-            double hoursPerFlight = 24.0 / dailyFrequency;
+            // Find the next occurrence of this flight's departure time after currentTime
+            LocalDateTime candidateDeparture = currentTime.toLocalDate()
+                .atTime(flightDepartureTime);
 
-            // Find next departure slot
-            // For simplicity, use hour 0, 6, 12, 18 for frequency 4, etc.
-            int departureHour = 0;
-            if (dailyFrequency > 1) {
-                departureHour = ((int) (currentTime.getHour() / hoursPerFlight) + 1) * (int) hoursPerFlight;
-                if (departureHour >= 24) {
-                    departureHour = 0;
-                    dayCounter++;
-                }
+            // If the candidate is before or equal to current time, move to next day
+            if (!candidateDeparture.isAfter(currentTime)) {
+                candidateDeparture = candidateDeparture.plusDays(1);
             }
 
-            // Calculate departure and arrival times
-            LocalDateTime departureTime = orderCreationTime.plusDays(dayCounter)
-                .withHour(departureHour).withMinute(0).withSecond(0);
+            LocalDateTime departureTime = candidateDeparture;
+
+            // Update day counter
+            dayCounter = (int) ChronoUnit.DAYS.between(orderCreationTime.toLocalDate(), departureTime.toLocalDate());
 
             // Handle null transport time
             Double transportTimeDays = flight.getTransportTimeDays();

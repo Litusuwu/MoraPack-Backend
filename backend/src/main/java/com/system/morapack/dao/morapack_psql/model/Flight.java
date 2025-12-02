@@ -3,6 +3,7 @@ package com.system.morapack.dao.morapack_psql.model;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Getter @Setter @Builder
 @AllArgsConstructor @NoArgsConstructor
@@ -29,6 +30,12 @@ public class Flight {
 
   @Column(name = "daily_frequency", nullable = false)
   private Integer dailyFrequency;
+
+  @Column(name = "departure_time", nullable = false)
+  private LocalTime departureTime;
+
+  @Column(name = "arrival_time", nullable = false)
+  private LocalTime arrivalTime;
 
   @Column(name = "status", nullable = false, length = 64)
   private String status;
