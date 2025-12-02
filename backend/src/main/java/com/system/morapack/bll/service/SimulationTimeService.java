@@ -70,9 +70,11 @@ public class SimulationTimeService {
 
         // OPTIMIZATION: Collect products to update by new status (for batch update)
         Map<PackageStatus, List<Integer>> productUpdates = new HashMap<>();
+        productUpdates.put(PackageStatus.PENDING, new ArrayList<>());
         productUpdates.put(PackageStatus.IN_TRANSIT, new ArrayList<>());
         productUpdates.put(PackageStatus.ARRIVED, new ArrayList<>());
         productUpdates.put(PackageStatus.DELIVERED, new ArrayList<>());
+        productUpdates.put(PackageStatus.DELAYED, new ArrayList<>());
 
         for (Product product : activeProducts) {
             PackageStatus oldStatus = product.getStatus();
