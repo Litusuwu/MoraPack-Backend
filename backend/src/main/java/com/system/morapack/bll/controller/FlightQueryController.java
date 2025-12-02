@@ -85,6 +85,22 @@ public class FlightQueryController {
     }
 
     /**
+     * Get all flight instances that have products assigned
+     * Returns the actual instance IDs like "FL-123-DAY-0-0800" with product counts
+     * This is used for accurate visualization - only show loaded planes for correct instances
+     */
+    public Map<String, Object> getAssignedFlightInstances() {
+        Map<String, Long> instanceCounts = productService.getProductCountPerFlightInstance();
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("totalInstances", instanceCounts.size());
+        response.put("instances", instanceCounts);
+        
+        return response;
+    }
+
+    /**
      * Get orders assigned to a specific flight
      * Used when user clicks on a flight in the map
      */
@@ -274,6 +290,8 @@ public class FlightQueryController {
             .assignedProducts(usedCapacity)
             .assignedOrders(assignedOrders)
             .isActive(true)
+            .departureTime(flight.getDepartureTime())
+            .arrivalTime(flight.getArrivalTime())
             .build();
     }
 

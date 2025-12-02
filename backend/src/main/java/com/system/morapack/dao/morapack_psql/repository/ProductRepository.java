@@ -33,6 +33,14 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
   @Query("SELECT COALESCE(SUM(p.weight), 0) FROM Product p WHERE p.assignedFlightInstance IS NOT NULL")
   double sumUsedCapacity();
 
+  // Get all distinct flight instance IDs that have products assigned
+  @Query("SELECT DISTINCT p.assignedFlightInstance FROM Product p WHERE p.assignedFlightInstance IS NOT NULL AND p.assignedFlightInstance <> ''")
+  List<String> findDistinctAssignedFlightInstances();
+
+  // Count products per flight instance
+  @Query("SELECT p.assignedFlightInstance, COUNT(p) FROM Product p WHERE p.assignedFlightInstance IS NOT NULL GROUP BY p.assignedFlightInstance")
+  List<Object[]> countProductsPerFlightInstance();
+
   // Performance optimization: Load only active products with their orders in one query
   @Query("SELECT p FROM Product p LEFT JOIN FETCH p.order WHERE p.status IN :statuses")
   List<Product> findByStatusIn(@Param("statuses") List<com.system.morapack.schemas.PackageStatus> statuses);
