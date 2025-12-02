@@ -26,6 +26,8 @@ public class FlightStatusDTO {
     private Integer assignedProducts;
     private Integer assignedOrders;
     private Boolean isActive;
+    private String departureTime;
+    private String arrivalTime;
 
     @Data
     @Builder

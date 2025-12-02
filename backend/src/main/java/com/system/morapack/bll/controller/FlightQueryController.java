@@ -243,6 +243,7 @@ public class FlightQueryController {
                 .count() : 0;
 
         return FlightStatusDTO.builder()
+
             .id(flight.getId())
             .code(flight.getCode())
             .originAirport(FlightStatusDTO.AirportDTO.builder()
@@ -274,6 +275,16 @@ public class FlightQueryController {
             .assignedProducts(usedCapacity)
             .assignedOrders(assignedOrders)
             .isActive(true)
+            .departureTime(
+                    flight.getDepartureTime() != null
+                            ? flight.getDepartureTime().toString()
+                            : null
+            )
+            .arrivalTime(
+                    flight.getArrivalTime() != null
+                            ? flight.getArrivalTime().toString()
+                            : null
+            )
             .build();
     }
 
