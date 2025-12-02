@@ -257,6 +257,10 @@ public class DatabaseInputDataSource implements InputDataSource {
         flightSchema.setOriginAirportSchema(originAirport);
         flightSchema.setDestinationAirportSchema(destAirport);
 
+        // Set departure and arrival times from database
+        flightSchema.setDepartureTime(flight.getDepartureTime());
+        flightSchema.setArrivalTime(flight.getArrivalTime());
+
         return flightSchema;
     }
 
