@@ -21,6 +21,11 @@ public class CityService {
         .orElseThrow(() -> new EntityNotFoundException("CitySchema not found with id: " + id));
   }
 
+  public City getCityByName(String name) {
+    return cityRepository.findByName(name)
+        .orElse(null); // Return null if not found (to match getFlightByCode behavior)
+  }
+
   public List<City> fetchCities(List<Integer> ids) {
     if (ids == null || ids.isEmpty()) return cityRepository.findAll();
     return cityRepository.findByIdIn(ids);

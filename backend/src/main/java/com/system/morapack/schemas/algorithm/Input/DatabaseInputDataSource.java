@@ -236,6 +236,7 @@ public class DatabaseInputDataSource implements InputDataSource {
         FlightSchema flightSchema = new FlightSchema();
 
         flightSchema.setId(flight.getId());
+        flightSchema.setCode(flight.getCode()); // FIX: Set code for flight lookup
         flightSchema.setMaxCapacity(flight.getMaxCapacity());
         flightSchema.setUsedCapacity(0); // Initial capacity is 0 (will be updated by algorithm)
 

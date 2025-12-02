@@ -69,20 +69,27 @@ public class RouteAdapter {
         .totalTime(s.getTotalTime())
         .totalCost(s.getTotalCost());
 
-    // Cities (toma ids desde los schemas anidados)
-    if (s.getOriginCitySchema() != null && s.getOriginCitySchema().getId() != 0) {
-      b.originCity(cityService.getCity(s.getOriginCitySchema().getId()));
+    // FIX: Cities - use NAME instead of ID (schema IDs don't match DB IDs)
+    if (s.getOriginCitySchema() != null && s.getOriginCitySchema().getName() != null) {
+      City originCity = cityService.getCityByName(s.getOriginCitySchema().getName());
+      if (originCity != null) {
+        b.originCity(originCity);
+      }
     }
-    if (s.getDestinationCitySchema() != null && s.getDestinationCitySchema().getId() != 0) {
-      b.destinationCity(cityService.getCity(s.getDestinationCitySchema().getId()));
+    if (s.getDestinationCitySchema() != null && s.getDestinationCitySchema().getName() != null) {
+      City destinationCity = cityService.getCityByName(s.getDestinationCitySchema().getName());
+      if (destinationCity != null) {
+        b.destinationCity(destinationCity);
+      }
     }
 
-    // Flights: usar ids de FlightSchema
+    // FIX: Flights - use CODE instead of ID (schema IDs don't match DB IDs)
     if (s.getFlightSchemas() != null) {
       b.flights(s.getFlightSchemas().stream()
-        .map(FlightSchema::getId)
+        .map(FlightSchema::getCode)
         .distinct()
-        .map(flightService::get)   
+        .map(flightService::getFlightByCode)
+        .filter(java.util.Objects::nonNull) // Filter out nulls if flight not found
         .toList());
     }
 
