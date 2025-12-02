@@ -73,6 +73,31 @@ public class ProductService {
     return (int) productRepository.countByFlightCode(flightCode);
   }
 
+  /**
+   * Get all distinct flight instance IDs that have products assigned
+   * Returns list like: ["FL-123-DAY-0-0800", "FL-456-DAY-1-1430", ...]
+   */
+  public List<String> getAssignedFlightInstances() {
+    return productRepository.findDistinctAssignedFlightInstances();
+  }
+
+  /**
+   * Get product count per flight instance
+   * Returns map like: {"FL-123-DAY-0-0800": 5, "FL-456-DAY-1-1430": 12, ...}
+   */
+  public java.util.Map<String, Long> getProductCountPerFlightInstance() {
+    List<Object[]> results = productRepository.countProductsPerFlightInstance();
+    java.util.Map<String, Long> countMap = new java.util.HashMap<>();
+    for (Object[] row : results) {
+      String instanceId = (String) row[0];
+      Long count = (Long) row[1];
+      if (instanceId != null) {
+        countMap.put(instanceId, count);
+      }
+    }
+    return countMap;
+  }
+
   @Transactional
   public void bulkDeleteProducts(List<Integer> ids) {
     productRepository.deleteAllByIdIn(ids);

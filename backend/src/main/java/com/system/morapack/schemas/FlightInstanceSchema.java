@@ -38,6 +38,8 @@ public class FlightInstanceSchema {
 
     /**
      * Generate unique instance ID
+     * Uses the hour/minute from departureDateTime directly
+     * (these are the scheduled times from flights.txt, treated as UTC)
      */
     public String generateInstanceId() {
         this.instanceId = String.format("FL-%d-DAY-%d-%02d%02d",
