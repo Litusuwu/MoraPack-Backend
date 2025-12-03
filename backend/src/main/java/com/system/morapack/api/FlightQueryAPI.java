@@ -39,6 +39,26 @@ public class FlightQueryAPI {
     }
 
     /**
+     * GET /api/query/flights/instances/assigned
+     * Get all flight instances that have products assigned
+     * Returns instance IDs like "FL-123-DAY-0-0800" with product counts
+     * Used for accurate simulation visualization
+     */
+    @GetMapping("/instances/assigned")
+    public ResponseEntity<Map<String, Object>> getAssignedFlightInstances() {
+        try {
+            Map<String, Object> response = controller.getAssignedFlightInstances();
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of(
+                    "success", false,
+                    "message", "Failed to get assigned flight instances: " + e.getMessage()
+                ));
+        }
+    }
+
+    /**
      * GET /api/query/flights/{flightCode}/orders
      * Get orders assigned to a specific flight
      * Used when user clicks on a flight in the map
