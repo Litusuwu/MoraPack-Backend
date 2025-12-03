@@ -175,8 +175,12 @@ public class DatabaseInputDataSource implements InputDataSource {
             }
         }
 
-        System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
-        System.out.println("[DATABASE] Filtered out " + filteredCount + " orders outside time window");
+        System.out.println("[DATABASE] ===== ORDER LOADING SUMMARY =====");
+        System.out.println("[DATABASE] Total orders in DB: " + allOrders.size());
+        System.out.println("[DATABASE] Orders LOADED (within time window): " + orderSchemas.size());
+        System.out.println("[DATABASE] Orders FILTERED (outside time window): " + filteredCount);
+        System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
+        System.out.println("[DATABASE] ==========================================");
         return orderSchemas;
     }
 

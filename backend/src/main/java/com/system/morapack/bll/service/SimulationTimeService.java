@@ -63,7 +63,7 @@ public class SimulationTimeService {
 
         // OPTIMIZATION: Load only active products (not DELIVERED) with their orders in one query
         List<Product> activeProducts = productRepository.findByStatusIn(
-            Arrays.asList(PackageStatus.PENDING, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
+            Arrays.asList(PackageStatus.PENDING, PackageStatus.ASSIGNED, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
         );
 
         System.out.println("Active products to check: " + activeProducts.size());
@@ -71,6 +71,7 @@ public class SimulationTimeService {
         // OPTIMIZATION: Collect products to update by new status (for batch update)
         Map<PackageStatus, List<Integer>> productUpdates = new HashMap<>();
         productUpdates.put(PackageStatus.PENDING, new ArrayList<>());
+        productUpdates.put(PackageStatus.ASSIGNED, new ArrayList<>());
         productUpdates.put(PackageStatus.IN_TRANSIT, new ArrayList<>());
         productUpdates.put(PackageStatus.ARRIVED, new ArrayList<>());
         productUpdates.put(PackageStatus.DELIVERED, new ArrayList<>());
@@ -118,24 +119,139 @@ public class SimulationTimeService {
             return PackageStatus.PENDING;
         }
 
-        // Calcular fecha de llegada del producto
+        // Calcular fechas de despegue y llegada del producto
+        LocalDateTime departureTime = calculateProductDepartureTime(product);
         LocalDateTime arrivalTime = calculateProductArrivalTime(product);
 
-        if (arrivalTime == null) {
-            // No se pudo calcular, mantener IN_TRANSIT
-            return PackageStatus.IN_TRANSIT;
+        if (departureTime == null || arrivalTime == null) {
+            // No se pudo calcular, mantener ASSIGNED por defecto
+            return PackageStatus.ASSIGNED;
         }
 
-        // Comparar con tiempo actual
-        if (currentTime.isBefore(arrivalTime)) {
-            // Aún en tránsito
+        // Comparar con tiempo actual para determinar estado
+        if (currentTime.isBefore(departureTime)) {
+            // El vuelo aún no ha despegado → ASSIGNED
+            return PackageStatus.ASSIGNED;
+        } else if (currentTime.isBefore(arrivalTime)) {
+            // El vuelo despegó pero aún no llega → IN_TRANSIT
             return PackageStatus.IN_TRANSIT;
-        } else if (currentTime.isAfter(arrivalTime.plusHours(2))) {
+        } else if (currentTime.isBefore(arrivalTime.plusHours(2))) {
+            // Llegó pero cliente tiene 2 horas para recoger → ARRIVED
+            return PackageStatus.ARRIVED;
+        } else {
             // Pasaron más de 2 horas desde llegada → DELIVERED (cliente recogió)
             return PackageStatus.DELIVERED;
-        } else {
-            // Llegó pero cliente aún tiene tiempo para recoger
-            return PackageStatus.ARRIVED;
+        }
+    }
+
+    /**
+     * Calcula cuándo despega el primer vuelo del producto
+     * Basándose en el vuelo asignado (ProductFlight)
+     */
+    private LocalDateTime calculateProductDepartureTime(Product product) {
+        List<ProductFlight> productFlights = product.getProductFlights();
+
+        if (productFlights == null || productFlights.isEmpty()) {
+            // Intentar parsear desde assigned_flight_instance
+            return parseDepartureFromInstanceId(product);
+        }
+
+        // Obtener el primer vuelo (mínimo sequenceOrder)
+        ProductFlight firstFlight = productFlights.stream()
+            .min((pf1, pf2) -> Integer.compare(pf1.getSequenceOrder(), pf2.getSequenceOrder()))
+            .orElse(null);
+
+        if (firstFlight == null || firstFlight.getFlight() == null) {
+            return null;
+        }
+
+        // Calcular fecha de despegue del primer vuelo
+        return calculateFlightDepartureTime(firstFlight.getFlight(), product);
+    }
+
+    /**
+     * Calcula fecha de despegue de un vuelo específico
+     */
+    private LocalDateTime calculateFlightDepartureTime(Flight flight, Product product) {
+        // Parsear assigned_flight_instance para obtener la fecha de salida
+        // Formato: FL-{flightId}-DAY-{day}-{HHmm}
+        String instanceId = product.getAssignedFlightInstance();
+
+        if (instanceId == null) {
+            return null;
+        }
+
+        try {
+            // Extraer información del instance ID
+            String[] parts = instanceId.split("-");
+            if (parts.length < 5) {
+                return null;
+            }
+
+            int day = Integer.parseInt(parts[3]); // DAY number
+            String timeStr = parts[4]; // HHmm
+
+            int hour = Integer.parseInt(timeStr.substring(0, 2));
+            int minute = timeStr.length() >= 4 ?
+                Integer.parseInt(timeStr.substring(2, 4)) : 0;
+
+            // Obtener orden para fecha base
+            Order order = product.getOrder();
+            if (order == null || order.getCreationDate() == null) {
+                return null;
+            }
+
+            // Calcular fecha de salida
+            LocalDateTime departureDate = order.getCreationDate()
+                .toLocalDate()
+                .atTime(hour, minute)
+                .plusDays(day);
+
+            return departureDate;
+
+        } catch (Exception e) {
+            System.err.println("Error calculating departure time for product " +
+                             product.getId() + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Parsear fecha de despegue desde assigned_flight_instance
+     * Como fallback si no hay ProductFlight
+     */
+    private LocalDateTime parseDepartureFromInstanceId(Product product) {
+        // Reutilizar la lógica de calculateFlightDepartureTime
+        Order order = product.getOrder();
+        if (order == null || order.getCreationDate() == null) {
+            return null;
+        }
+
+        String instanceId = product.getAssignedFlightInstance();
+        if (instanceId == null || instanceId.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            String[] parts = instanceId.split("-");
+            if (parts.length < 5) {
+                return null;
+            }
+
+            int day = Integer.parseInt(parts[3]);
+            String timeStr = parts[4];
+
+            int hour = Integer.parseInt(timeStr.substring(0, 2));
+            int minute = timeStr.length() >= 4 ?
+                Integer.parseInt(timeStr.substring(2, 4)) : 0;
+
+            return order.getCreationDate()
+                .toLocalDate()
+                .atTime(hour, minute)
+                .plusDays(day);
+
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -241,7 +357,7 @@ public class SimulationTimeService {
     private void updateOrderStates() {
         // OPTIMIZATION: Load only active orders WITH products in ONE query (no N+1)
         List<Order> activeOrders = orderRepository.findByStatusInWithProducts(
-            Arrays.asList(PackageStatus.PENDING, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
+            Arrays.asList(PackageStatus.PENDING, PackageStatus.ASSIGNED, PackageStatus.IN_TRANSIT, PackageStatus.ARRIVED)
         );
 
         System.out.println("Active orders to check: " + activeOrders.size());
@@ -263,11 +379,25 @@ public class SimulationTimeService {
     /**
      * Maneja la actualización de capacidad en los almacenes
      * Regla: Los ORDERS ocupan espacio (1 unidad por orden)
+     *
+     * Estados y capacidad:
+     * - PENDING: Ocupa espacio en origen
+     * - ASSIGNED: Sigue ocupando espacio en origen (esperando despegue)
+     * - IN_TRANSIT: No ocupa espacio (en el aire)
+     * - ARRIVED: Ocupa espacio en destino
+     * - DELIVERED: No ocupa espacio (cliente recogió)
      */
     private void handleCapacityUpdate(Order order, PackageStatus oldStatus, PackageStatus newStatus) {
       try {
-        // PENDING -> IN_TRANSIT: Sale del origen
-        if (oldStatus == PackageStatus.PENDING && newStatus == PackageStatus.IN_TRANSIT) {
+        // PENDING -> ASSIGNED: Sin cambio (sigue en origen)
+        // No se modifica capacidad
+
+        // ASSIGNED -> IN_TRANSIT: Sale del origen (despegó)
+        if (oldStatus == PackageStatus.ASSIGNED && newStatus == PackageStatus.IN_TRANSIT) {
+          updateAirportCapacity(order.getOrigin(), -1);
+        }
+        // PENDING -> IN_TRANSIT: Sale del origen (transición directa, fallback)
+        else if (oldStatus == PackageStatus.PENDING && newStatus == PackageStatus.IN_TRANSIT) {
           updateAirportCapacity(order.getOrigin(), -1);
         }
         // IN_TRANSIT -> ARRIVED: Llega al destino
@@ -322,8 +452,9 @@ public class SimulationTimeService {
         }
 
         boolean allDelivered = true;
-        boolean anyInTransit = false;
         boolean anyArrived = false;
+        boolean anyInTransit = false;
+        boolean anyAssigned = false;
 
         for (Product product : products) {
             PackageStatus status = product.getStatus();
@@ -331,20 +462,26 @@ public class SimulationTimeService {
             if (status != PackageStatus.DELIVERED) {
                 allDelivered = false;
             }
-            if (status == PackageStatus.IN_TRANSIT) {
-                anyInTransit = true;
-            }
             if (status == PackageStatus.ARRIVED) {
                 anyArrived = true;
             }
+            if (status == PackageStatus.IN_TRANSIT) {
+                anyInTransit = true;
+            }
+            if (status == PackageStatus.ASSIGNED) {
+                anyAssigned = true;
+            }
         }
 
+        // Order status reflects the "most advanced" product state
         if (allDelivered) {
             return PackageStatus.DELIVERED;
         } else if (anyArrived) {
             return PackageStatus.ARRIVED;
         } else if (anyInTransit) {
             return PackageStatus.IN_TRANSIT;
+        } else if (anyAssigned) {
+            return PackageStatus.ASSIGNED;
         } else {
             return PackageStatus.PENDING;
         }
@@ -396,14 +533,19 @@ public class SimulationTimeService {
      * Clase para estadísticas de actualización
      */
     public static class SimulationUpdateStats {
+        private int pendingToAssigned = 0;
         private int pendingToInTransit = 0;
+        private int assignedToInTransit = 0;
         private int inTransitToArrived = 0;
         private int arrivedToDelivered = 0;
-        private int noChange = 0;
 
         public void recordTransition(PackageStatus from, PackageStatus to) {
-            if (from == PackageStatus.PENDING && to == PackageStatus.IN_TRANSIT) {
+            if (from == PackageStatus.PENDING && to == PackageStatus.ASSIGNED) {
+                pendingToAssigned++;
+            } else if (from == PackageStatus.PENDING && to == PackageStatus.IN_TRANSIT) {
                 pendingToInTransit++;
+            } else if (from == PackageStatus.ASSIGNED && to == PackageStatus.IN_TRANSIT) {
+                assignedToInTransit++;
             } else if (from == PackageStatus.IN_TRANSIT && to == PackageStatus.ARRIVED) {
                 inTransitToArrived++;
             } else if (from == PackageStatus.ARRIVED && to == PackageStatus.DELIVERED) {
@@ -413,18 +555,23 @@ public class SimulationTimeService {
 
         public void print() {
             System.out.println("State transitions:");
+            System.out.println("  PENDING → ASSIGNED: " + pendingToAssigned);
             System.out.println("  PENDING → IN_TRANSIT: " + pendingToInTransit);
+            System.out.println("  ASSIGNED → IN_TRANSIT: " + assignedToInTransit);
             System.out.println("  IN_TRANSIT → ARRIVED: " + inTransitToArrived);
             System.out.println("  ARRIVED → DELIVERED: " + arrivedToDelivered);
             System.out.println("Total transitions: " + getTotalTransitions());
         }
 
         public int getTotalTransitions() {
-            return pendingToInTransit + inTransitToArrived + arrivedToDelivered;
+            return pendingToAssigned + pendingToInTransit + assignedToInTransit +
+                   inTransitToArrived + arrivedToDelivered;
         }
 
         // Getters
+        public int getPendingToAssigned() { return pendingToAssigned; }
         public int getPendingToInTransit() { return pendingToInTransit; }
+        public int getAssignedToInTransit() { return assignedToInTransit; }
         public int getInTransitToArrived() { return inTransitToArrived; }
         public int getArrivedToDelivered() { return arrivedToDelivered; }
     }
