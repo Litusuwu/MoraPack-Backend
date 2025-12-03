@@ -29,6 +29,7 @@ public class ProductWithOrderDTO {
     public static class OrderInfo {
         private Integer id;
         private String name;
+        private String origin;      // 👈 NUEVO
         private String destination;
         private String customer;
     }
