@@ -145,6 +145,8 @@ public class DataLoadService {
      * Clear all orders and their associated products from database
      * Use this before loading fresh data to avoid duplicates
      * Deletes products first to handle foreign key constraints
+     * 
+     * Uses NATIVE DELETE queries to avoid OOM - JPA's deleteAll() loads all entities first
      */
     @Transactional
     public void clearAllOrders() {
@@ -153,13 +155,13 @@ public class DataLoadService {
         System.out.println("========================================");
 
         try {
-            // Delete all products first (they reference orders)
-            productService.deleteAll();
-            System.out.println("Products cleared");
+            // Delete all products first (they reference orders) - using native DELETE
+            productService.deleteAllNative();
+            System.out.println("Products cleared (native DELETE)");
             
-            // Delete all orders
-            orderService.deleteAll();
-            System.out.println("Orders cleared");
+            // Delete all orders - using native DELETE
+            orderService.deleteAllNative();
+            System.out.println("Orders cleared (native DELETE)");
             
             System.out.println("Successfully cleared all orders and products");
             System.out.println("========================================");
