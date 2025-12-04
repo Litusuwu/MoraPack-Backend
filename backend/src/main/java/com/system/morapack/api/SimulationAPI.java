@@ -83,9 +83,7 @@ public class SimulationAPI {
         response.put("currentSimulationTime", request.getCurrentTime());
 
         Map<String, Integer> transitions = new HashMap<>();
-        transitions.put("pendingToAssigned", stats.getPendingToAssigned());
         transitions.put("pendingToInTransit", stats.getPendingToInTransit());
-        transitions.put("assignedToInTransit", stats.getAssignedToInTransit());
         transitions.put("inTransitToArrived", stats.getInTransitToArrived());
         transitions.put("arrivedToDelivered", stats.getArrivedToDelivered());
         transitions.put("total", stats.getTotalTransitions());
@@ -143,9 +141,7 @@ public class SimulationAPI {
         response.put("hoursAdvanced", request.getHoursToAdvance());
 
         Map<String, Integer> transitions = new HashMap<>();
-        transitions.put("pendingToAssigned", stats.getPendingToAssigned());
         transitions.put("pendingToInTransit", stats.getPendingToInTransit());
-        transitions.put("assignedToInTransit", stats.getAssignedToInTransit());
         transitions.put("inTransitToArrived", stats.getInTransitToArrived());
         transitions.put("arrivedToDelivered", stats.getArrivedToDelivered());
         transitions.put("total", stats.getTotalTransitions());
