@@ -46,9 +46,13 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
   List<Product> findByStatusIn(@Param("statuses") List<com.system.morapack.schemas.PackageStatus> statuses);
 
   // Performance optimization: Batch update product statuses
-  @Modifying(clearAutomatically = true)
+  @Modifying
   @Transactional
   @Query("UPDATE Product p SET p.status = :status WHERE p.id IN :ids")
   void batchUpdateStatus(@Param("status") com.system.morapack.schemas.PackageStatus status, @Param("ids") List<Integer> ids);
 
+  // Native delete all - doesn't load entities into memory (prevents OOM)
+  @Modifying
+  @Query(value = "DELETE FROM products", nativeQuery = true)
+  void deleteAllNative();
 }

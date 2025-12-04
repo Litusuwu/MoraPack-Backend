@@ -33,4 +33,9 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
   // Find oldest order by creation date (for simulation start date calculation)
   Optional<Order> findTopByOrderByCreationDateAsc();
+
+  // Native delete all - doesn't load entities into memory (prevents OOM)
+  @Modifying
+  @Query(value = "DELETE FROM orders", nativeQuery = true)
+  void deleteAllNative();
 }

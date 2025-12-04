@@ -124,4 +124,13 @@ public class ProductService {
     productRepository.deleteAll();
   }
 
+  /**
+   * Native DELETE - doesn't load entities into memory, prevents OOM
+   * Use this for large datasets instead of deleteAll()
+   */
+  @Transactional
+  public void deleteAllNative() {
+    productRepository.deleteAllNative();
+  }
+
 }
