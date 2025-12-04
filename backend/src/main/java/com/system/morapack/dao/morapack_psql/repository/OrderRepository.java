@@ -30,4 +30,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
   // Performance optimization: Load orders with products in one query (prevents N+1)
   @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.products WHERE o.status IN :statuses")
   List<Order> findByStatusInWithProducts(@org.springframework.data.repository.query.Param("statuses") List<PackageStatus> statuses);
+
+  // Find oldest order by creation date (for simulation start date calculation)
+  Optional<Order> findTopByOrderByCreationDateAsc();
 }

@@ -332,6 +332,7 @@ public class FlightQueryController {
             .order(ProductWithOrderDTO.OrderInfo.builder()
                 .id(product.getOrder().getId())
                 .name(product.getOrder().getName())
+                    .origin(product.getOrder().getOrigin().getName())          // 👈 NUEVO
                 .destination(product.getOrder().getDestination().getName())
                 .customer(product.getOrder().getCustomer().getPhone())
                 .build())

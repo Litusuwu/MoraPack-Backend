@@ -1,9 +1,9 @@
 package com.system.morapack.schemas;
 
 public enum PackageStatus {
-    PENDING,
-    IN_TRANSIT,
-    ARRIVED,
-    DELIVERED,
-    DELAYED
+    PENDING,      // No tiene vuelo asignado o esperando despegue
+    IN_TRANSIT,   // Vuelo en el aire (despegó)
+    ARRIVED,      // Llegó al destino
+    DELIVERED,    // Cliente recogió
+    DELAYED       // Vuelo retrasado
 }

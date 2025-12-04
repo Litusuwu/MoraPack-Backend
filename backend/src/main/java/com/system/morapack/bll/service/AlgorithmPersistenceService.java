@@ -248,7 +248,9 @@ public class AlgorithmPersistenceService {
     private PackageStatus mapStatusToPackageStatus(Status status) {
         switch (status) {
             case ASSIGNED:
-                return PackageStatus.IN_TRANSIT;
+                // When algorithm assigns flights, products start in PENDING state
+                // They will transition to IN_TRANSIT when their flight departs
+                return PackageStatus.PENDING;
             case NOT_ASSIGNED:
                 return PackageStatus.PENDING;
             case DELIVERED:

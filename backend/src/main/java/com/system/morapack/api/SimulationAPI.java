@@ -81,12 +81,14 @@ public class SimulationAPI {
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("currentSimulationTime", request.getCurrentTime());
-        response.put("transitions", Map.of(
-            "pendingToInTransit", stats.getPendingToInTransit(),
-            "inTransitToArrived", stats.getInTransitToArrived(),
-            "arrivedToDelivered", stats.getArrivedToDelivered(),
-            "total", stats.getTotalTransitions()
-        ));
+
+        Map<String, Integer> transitions = new HashMap<>();
+        transitions.put("pendingToInTransit", stats.getPendingToInTransit());
+        transitions.put("inTransitToArrived", stats.getInTransitToArrived());
+        transitions.put("arrivedToDelivered", stats.getArrivedToDelivered());
+        transitions.put("total", stats.getTotalTransitions());
+
+        response.put("transitions", transitions);
 
         response.put("capacityStats", Map.of(
                 "usedCapacity", capacityStats.getUsedCapacity(),
@@ -137,12 +139,14 @@ public class SimulationAPI {
         response.put("previousTime", request.getCurrentTime());
         response.put("newTime", newTime);
         response.put("hoursAdvanced", request.getHoursToAdvance());
-        response.put("transitions", Map.of(
-            "pendingToInTransit", stats.getPendingToInTransit(),
-            "inTransitToArrived", stats.getInTransitToArrived(),
-            "arrivedToDelivered", stats.getArrivedToDelivered(),
-            "total", stats.getTotalTransitions()
-        ));
+
+        Map<String, Integer> transitions = new HashMap<>();
+        transitions.put("pendingToInTransit", stats.getPendingToInTransit());
+        transitions.put("inTransitToArrived", stats.getInTransitToArrived());
+        transitions.put("arrivedToDelivered", stats.getArrivedToDelivered());
+        transitions.put("total", stats.getTotalTransitions());
+
+        response.put("transitions", transitions);
 
         return ResponseEntity.ok(response);
     }
