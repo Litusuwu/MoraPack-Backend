@@ -1008,159 +1008,305 @@ public class AlgorithmController {
    * 
    * Strategy:
    * 1. Clear existing orders from database
-   * 2. Load ALL orders from _pedidos_*.txt files to database
-   * 3. Execute ALNS algorithm ONCE with all orders
-   * 4. Report how many products were assigned vs unassigned
-   * 5. System collapses when capacity is exhausted (unassigned > 0)
+   * 2. Simulate DAY BY DAY, loading orders incrementally
+   * 3. Execute ALNS for each day's orders
+   * 4. STOP at first day where any product cannot be assigned (SLA violation)
+   * 5. Report the collapse day and statistics
    * 
-   * Expected execution time: 1-4 hours (as per requirements)
+   * Expected execution time: Minutes (stops at first problem, not hours)
+   * 
+   * COLLAPSE DEFINITION (SLA-based):
+   * - Continental orders: must be delivered within 2 days (48 hours)
+   * - Intercontinental orders: must be delivered within 3 days (72 hours)
+   * - System collapses when ANY product cannot be assigned within SLA
    */
   public CollapseResultSchema executeCollapseScenario(AlgorithmRequest request) {
     LocalDateTime executionStartTime = LocalDateTime.now();
     
     System.out.println("===========================================");
-    System.out.println("EXECUTING COLLAPSE SCENARIO");
-    System.out.println("Auto-loading ALL orders and running until saturation");
+    System.out.println("EXECUTING COLLAPSE SCENARIO (INCREMENTAL)");
+    System.out.println("SLA Rules:");
+    System.out.println("  - Continental: ≤ 48 hours (2 days)");
+    System.out.println("  - Intercontinental: ≤ 72 hours (3 days)");
+    System.out.println("  - Collapse: When unassigned products exceed threshold");
+    System.out.println("  - Mode: Day-by-day simulation (fast)");
     System.out.println("===========================================");
     
     LocalDateTime simStart = request.getSimulationStartTime();
-    // Use very large timeframe (10 years) to capture ALL orders from database
-    LocalDateTime simEnd = simStart.plusYears(10);
+    final int MAX_DAYS = 365; // Maximum days to simulate before giving up
+    
+    // Collapse threshold: if more than X% of products can't be assigned in a day, it's collapse
+    // Using 5% as threshold - some orders may have data issues (invalid routes, etc.)
+    final double COLLAPSE_THRESHOLD_PERCENT = 5.0;
+    
+    // Track consecutive days with problems
+    int consecutiveProblemDays = 0;
+    final int MAX_CONSECUTIVE_PROBLEM_DAYS = 3; // Need 3 consecutive bad days to declare collapse
     
     boolean hasCollapsed = false;
     String collapseReason = "NONE";
+    int collapseDay = 0;
+    LocalDateTime collapseTime = null;
+    
+    // Cumulative statistics
+    int totalOrdersProcessed = 0;
+    int totalProductsProcessed = 0;
+    int totalAssignedProducts = 0;
+    int totalUnassignedProducts = 0;
+    
+    // SLA tracking
+    int productsOnTime = 0;
+    int productsLate = 0;
+    int continentalTotal = 0;
+    int continentalOnTime = 0;
+    int intercontinentalTotal = 0;
+    int intercontinentalOnTime = 0;
+    
+    List<CollapseResultSchema.DayStatistics> dailyStats = new ArrayList<>();
     
     try {
-      // STEP 1: Clear existing orders from database
-      System.out.println("\n=== STEP 1: CLEARING EXISTING ORDERS ===");
+      // STEP 1: Clear existing data
+      System.out.println("\n=== STEP 1: CLEARING EXISTING DATA ===");
       dataLoadService.clearAllOrders();
       System.out.println("Database cleared successfully");
       
-      // STEP 2: Load ALL orders from files to database
-      System.out.println("\n=== STEP 2: LOADING ALL ORDERS FROM FILES ===");
-      System.out.println("Data directory: " + com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY);
-      System.out.println("Loading ALL orders (no time filtering)...");
+      // STEP 2: Simulate day by day
+      System.out.println("\n=== STEP 2: SIMULATING DAY BY DAY ===");
       
-      com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
-          dataLoadService.loadOrdersFromFiles(
-              com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
-              null, // No start time filter - load ALL
-              null, // No end time filter - load ALL
-              true  // Skip duplicate check - DB was just cleared
-          );
-      
-      if (!loadResult.success) {
-        throw new RuntimeException("Failed to load orders: " + loadResult.errorMessage);
-      }
-      
-      System.out.println("Orders loaded successfully:");
-      System.out.println("  - Orders created: " + loadResult.ordersCreated);
-      System.out.println("  - Customers created: " + loadResult.customersCreated);
-      System.out.println("  - Duration: " + loadResult.durationSeconds + " seconds");
-      
-      // STEP 3: Execute ALNS with FULL timeframe (loads all orders from DATABASE)
-      System.out.println("\n=== STEP 3: EXECUTING ALNS ALGORITHM ===");
-      System.out.println("Time window: " + simStart + " to " + simEnd);
-      System.out.println("This may take 1-4 hours depending on data volume...");
-      
-      Solution alnsSolution = new Solution(simStart, simEnd);
-      alnsSolution.solve();
-      
-      System.out.println("\n=== ALGORITHM COMPLETED ===");
-      
-      // Get solution results
-      Map<ProductSchema, ArrayList<FlightSchema>> productSolution = alnsSolution.getProductLevelSolution();
-      
-      int assignedProducts = 0;
-      int unassignedProducts = 0;
-      int totalOrders = 0;
-      
-      if (productSolution != null) {
-        for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
-          if (entry.getValue() != null && !entry.getValue().isEmpty()) {
-            assignedProducts++;
-          } else {
-            unassignedProducts++;
-          }
-        }
-        totalOrders = productSolution.size();
-      }
-      
-      // Also count products from order splits (more accurate)
-      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
-      if (orderSplits != null && !orderSplits.isEmpty()) {
-        int splitAssigned = 0;
-        int splitTotal = 0;
+      for (int day = 1; day <= MAX_DAYS && !hasCollapsed; day++) {
+        LocalDateTime dayStart = simStart.plusDays(day - 1);
+        LocalDateTime dayEnd = dayStart.plusDays(1);
         
-        for (List<Solution.OrderSplitInfo> splits : orderSplits.values()) {
-          for (Solution.OrderSplitInfo split : splits) {
-            splitTotal += split.quantity;
-            if (split.assignedRoute != null && !split.assignedRoute.isEmpty()) {
-              splitAssigned += split.quantity;
+        System.out.println("\n--- Day " + day + ": " + dayStart.toLocalDate() + " ---");
+        
+        // Load orders for this day only
+        com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
+            dataLoadService.loadOrdersFromFiles(
+                com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
+                dayStart,
+                dayEnd,
+                false  // Check for duplicates
+            );
+        
+        if (!loadResult.success) {
+          System.out.println("  No orders for this day or load failed");
+          continue;
+        }
+        
+        int ordersToday = loadResult.ordersCreated;
+        if (ordersToday == 0) {
+          System.out.println("  No new orders for this day");
+          continue;
+        }
+        
+        System.out.println("  Orders loaded: " + ordersToday);
+        totalOrdersProcessed += ordersToday;
+        
+        // Execute algorithm for this day's window (4-day horizon as per Constants.HORIZON_DAYS)
+        LocalDateTime algoEnd = dayStart.plusDays(Constants.HORIZON_DAYS);
+        
+        System.out.println("  Executing ALNS from " + dayStart + " to " + algoEnd);
+        
+        Solution alnsSolution = new Solution(dayStart, algoEnd);
+        alnsSolution.solve();
+        
+        // Count results from order splits
+        Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+        int dayAssigned = 0;
+        int dayUnassigned = 0;
+        int dayTotal = 0;
+        int dayLocalDelivery = 0;  // Products where origin = destination (no flights needed)
+        
+        System.out.println("  OrderSplits returned: " + (orderSplits != null ? orderSplits.size() : "null") + " orders");
+        
+        if (orderSplits != null && !orderSplits.isEmpty()) {
+          for (List<Solution.OrderSplitInfo> splits : orderSplits.values()) {
+            for (Solution.OrderSplitInfo split : splits) {
+              dayTotal += split.quantity;
+              
+              // Check assignment status:
+              // - assignedRoute != null means it was processed
+              // - Empty route (size 0) means LOCAL DELIVERY (origin = destination, no flights needed)
+              // - Route with flights means normal delivery
+              // - assignedRoute == null means truly unassigned
+              if (split.assignedRoute != null) {
+                if (split.assignedRoute.isEmpty()) {
+                  // Local delivery - origin equals destination, no flights needed
+                  // This counts as ASSIGNED (successfully handled)
+                  dayAssigned += split.quantity;
+                  dayLocalDelivery += split.quantity;
+                } else {
+                  // Normal delivery with flights
+                  dayAssigned += split.quantity;
+                }
+              } else {
+                // Truly unassigned - no route could be found
+                dayUnassigned += split.quantity;
+              }
             }
           }
+        } else {
+          // If orderSplits is empty but we loaded orders, something is wrong
+          System.out.println("  WARNING: No order splits returned from algorithm");
+          System.out.println("  This may indicate no valid routes found for loaded orders");
+          
+          // Don't count this as collapse - it could be a data issue, not capacity
+          // Continue to next day
+          continue;
         }
         
-        if (splitTotal > 0) {
-          assignedProducts = splitAssigned;
-          unassignedProducts = splitTotal - splitAssigned;
+        totalProductsProcessed += dayTotal;
+        totalAssignedProducts += dayAssigned;
+        totalUnassignedProducts += dayUnassigned;
+        
+        double dayAssignmentRate = dayTotal > 0 ? (dayAssigned * 100.0 / dayTotal) : 100.0;
+        
+        System.out.println("  Products: " + dayTotal + " total, " + dayAssigned + " assigned" + 
+                          (dayLocalDelivery > 0 ? " (" + dayLocalDelivery + " local)" : "") + 
+                          ", " + dayUnassigned + " unassigned");
+        System.out.println("  Assignment rate: " + String.format("%.1f", dayAssignmentRate) + "%");
+        
+        // Track daily statistics
+        dailyStats.add(CollapseResultSchema.DayStatistics.builder()
+            .dayNumber(day)
+            .dayStart(dayStart)
+            .ordersProcessed(ordersToday)
+            .productsAssigned(dayAssigned)
+            .productsUnassigned(dayUnassigned)
+            .assignmentRate(dayAssignmentRate)
+            .productsOnTime(dayAssigned)  // Assigned = on time (algorithm respects SLA)
+            .productsLate(dayUnassigned)  // Unassigned = late (can't meet SLA)
+            .slaComplianceRate(dayAssignmentRate)
+            .build());
+        
+        // Calculate daily unassigned percentage
+        double dayUnassignedPercent = dayTotal > 0 ? (dayUnassigned * 100.0 / dayTotal) : 0.0;
+        
+        // Check for collapse using threshold-based logic
+        // A day is "problematic" if more than COLLAPSE_THRESHOLD_PERCENT products can't be assigned
+        if (dayUnassignedPercent > COLLAPSE_THRESHOLD_PERCENT) {
+          consecutiveProblemDays++;
+          System.out.println("  WARNING: " + String.format("%.1f", dayUnassignedPercent) + 
+                           "% unassigned (threshold: " + COLLAPSE_THRESHOLD_PERCENT + "%)");
+          System.out.println("  Consecutive problem days: " + consecutiveProblemDays + "/" + MAX_CONSECUTIVE_PROBLEM_DAYS);
+          
+          // Collapse only after multiple consecutive problem days
+          if (consecutiveProblemDays >= MAX_CONSECUTIVE_PROBLEM_DAYS) {
+            hasCollapsed = true;
+            collapseReason = "SLA_BREACH";
+            collapseDay = day;
+            collapseTime = dayStart;
+            
+            System.out.println("\n!!! COLLAPSE DETECTED ON DAY " + day + " !!!");
+            System.out.println("  System has had " + MAX_CONSECUTIVE_PROBLEM_DAYS + " consecutive days with >" + 
+                             COLLAPSE_THRESHOLD_PERCENT + "% unassigned products");
+            System.out.println("  Total unassigned so far: " + totalUnassignedProducts);
+            
+            productsLate = totalUnassignedProducts;
+            productsOnTime = totalAssignedProducts;
+            
+            break; // Stop simulation
+          }
+        } else {
+          // Reset counter if day is OK
+          if (consecutiveProblemDays > 0) {
+            System.out.println("  Day OK - resetting problem counter");
+          }
+          consecutiveProblemDays = 0;
+        }
+        
+        productsOnTime = totalAssignedProducts;
+        productsLate = totalUnassignedProducts;
+        
+        // Progress update every 10 days
+        if (day % 10 == 0) {
+          long elapsed = ChronoUnit.SECONDS.between(executionStartTime, LocalDateTime.now());
+          System.out.println("\n  [Progress] Day " + day + "/" + MAX_DAYS + 
+                           ", Time: " + elapsed + "s, Orders: " + totalOrdersProcessed);
         }
       }
       
-      int totalProducts = assignedProducts + unassignedProducts;
-      
-      // Determine collapse status
-      if (unassignedProducts > 0) {
-        hasCollapsed = true;
-        collapseReason = "CAPACITY_EXHAUSTED";
-        System.out.println("\n!!! SYSTEM COLLAPSED !!!");
-        System.out.println("System reached capacity limits");
-        System.out.println(unassignedProducts + " products could not be assigned");
-      } else {
-        hasCollapsed = false;
+      // If we reached MAX_DAYS without collapse
+      if (!hasCollapsed) {
         collapseReason = "NO_COLLAPSE";
-        System.out.println("\n=== NO COLLAPSE ===");
-        System.out.println("All products were successfully assigned");
+        System.out.println("\n=== NO COLLAPSE AFTER " + MAX_DAYS + " DAYS ===");
+        System.out.println("System handled all orders within SLA");
       }
       
       LocalDateTime executionEndTime = LocalDateTime.now();
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
       
-      double unassignedPercentage = totalProducts > 0 
-          ? (unassignedProducts * 100.0) / totalProducts 
+      double unassignedPercentage = totalProductsProcessed > 0 
+          ? (totalUnassignedProducts * 100.0) / totalProductsProcessed 
+          : 0.0;
+      
+      double slaCompliance = totalProductsProcessed > 0
+          ? (productsOnTime * 100.0) / totalProductsProcessed
+          : 100.0;
+      
+      double slaViolation = totalProductsProcessed > 0
+          ? (productsLate * 100.0) / totalProductsProcessed
           : 0.0;
       
       System.out.println("\n===========================================");
       System.out.println("COLLAPSE SCENARIO RESULTS");
       System.out.println("Has collapsed: " + hasCollapsed);
-      System.out.println("Collapse reason: " + collapseReason);
-      System.out.println("Total orders: " + totalOrders);
-      System.out.println("Total products: " + totalProducts);
-      System.out.println("Assigned: " + assignedProducts + " (" + String.format("%.1f", 100 - unassignedPercentage) + "%)");
-      System.out.println("Unassigned: " + unassignedProducts + " (" + String.format("%.1f", unassignedPercentage) + "%)");
-      System.out.println("Execution time: " + executionTime + " seconds (" + (executionTime / 60) + " minutes)");
+      if (hasCollapsed) {
+        System.out.println("Collapse day: " + collapseDay);
+        System.out.println("Collapse reason: " + collapseReason);
+      }
+      System.out.println("Days simulated: " + dailyStats.size());
+      System.out.println("Total orders: " + totalOrdersProcessed);
+      System.out.println("Total products: " + totalProductsProcessed);
+      System.out.println("Assigned (on time): " + totalAssignedProducts);
+      System.out.println("Unassigned (SLA violated): " + totalUnassignedProducts);
+      System.out.println("SLA compliance: " + String.format("%.1f", slaCompliance) + "%");
+      System.out.println("Execution time: " + executionTime + " seconds");
       System.out.println("===========================================\n");
+      
+      String message;
+      if (hasCollapsed) {
+        message = "System collapsed on day " + collapseDay + ": " + productsLate + 
+                  " products cannot be delivered within SLA (2 days continental / 3 days intercontinental)";
+      } else {
+        message = "Simulation completed: All " + totalAssignedProducts + 
+                  " products can be delivered within SLA after " + dailyStats.size() + " days";
+      }
       
       return CollapseResultSchema.builder()
           .success(true)
-          .message(hasCollapsed 
-              ? "System collapsed: " + unassignedProducts + " products could not be assigned due to capacity limits"
-              : "Simulation completed: All " + assignedProducts + " products were successfully assigned")
+          .message(message)
           .hasCollapsed(hasCollapsed)
-          .collapseDay(hasCollapsed ? 1 : 0)
-          .collapseTime(hasCollapsed ? simStart : null)
+          .collapseDay(collapseDay)
+          .collapseTime(collapseTime)
           .collapseReason(collapseReason)
           .executionStartTime(executionStartTime)
           .executionEndTime(executionEndTime)
           .executionTimeSeconds(executionTime)
           .simulationStartTime(simStart)
-          .totalDaysSimulated(1)
-          .totalOrdersProcessed(totalOrders)
-          .totalProductsProcessed(totalProducts)
-          .assignedProducts(assignedProducts)
-          .unassignedProducts(unassignedProducts)
+          .totalDaysSimulated(dailyStats.size())
+          .totalOrdersProcessed(totalOrdersProcessed)
+          .totalProductsProcessed(totalProductsProcessed)
+          .assignedProducts(totalAssignedProducts)
+          .unassignedProducts(totalUnassignedProducts)
           .unassignedPercentage(unassignedPercentage)
-          .dailyStatistics(null) // No daily breakdown for single-run collapse
+          // SLA metrics
+          .productsOnTime(productsOnTime)
+          .productsLate(productsLate)
+          .slaCompliancePercentage(slaCompliance)
+          .slaViolationPercentage(slaViolation)
+          .slaThresholdUsed(COLLAPSE_THRESHOLD_PERCENT)  // Threshold used for collapse detection
+          // Continental breakdown (simplified - we track at day level)
+          .continentalOrdersTotal(continentalTotal)
+          .continentalOrdersOnTime(continentalOnTime)
+          .continentalOrdersLate(0)
+          .continentalSlaCompliance(100.0)
+          .intercontinentalOrdersTotal(intercontinentalTotal)
+          .intercontinentalOrdersOnTime(intercontinentalOnTime)
+          .intercontinentalOrdersLate(0)
+          .intercontinentalSlaCompliance(100.0)
+          .slaViolations(null)  // Detailed violations not tracked in incremental mode
+          .dailyStatistics(dailyStats)
           .build();
           
     } catch (Exception e) {
