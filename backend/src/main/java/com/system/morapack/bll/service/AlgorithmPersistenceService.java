@@ -135,7 +135,15 @@ public class AlgorithmPersistenceService {
                 // Create Product record for this split
                 Product product = new Product();
                 product.setName("Product-Split-" + orderName + "-" + productCounter);
-                product.setStatus(mapStatusToPackageStatus(split.getStatus()));
+
+                // Check for local delivery (empty route = origin equals destination)
+                // When algorithm returns empty route, it means product is already at destination
+                if (split.getAssignedFlights() != null && split.getAssignedFlights().isEmpty()) {
+                    // Local delivery - immediately mark as DELIVERED
+                    product.setStatus(PackageStatus.DELIVERED);
+                } else {
+                    product.setStatus(mapStatusToPackageStatus(split.getStatus()));
+                }
 
                 // Set default weight and volume (1 unit per product)
                 // These represent standardized package units
@@ -188,8 +196,17 @@ public class AlgorithmPersistenceService {
                 productCounter++;
             }
 
-            // Update order status to IN_TRANSIT
-            updateOrderStatus(orderName, PackageStatus.IN_TRANSIT);
+            // Update order status based on splits
+            // If ALL splits are local deliveries (empty routes), mark order as DELIVERED
+            // Otherwise, mark as IN_TRANSIT
+            boolean allLocalDeliveries = splits.stream()
+                .allMatch(split -> split.getAssignedFlights() != null && split.getAssignedFlights().isEmpty());
+
+            if (allLocalDeliveries) {
+                updateOrderStatus(orderName, PackageStatus.DELIVERED);
+            } else {
+                updateOrderStatus(orderName, PackageStatus.IN_TRANSIT);
+            }
         }
 
         // BATCH INSERT: Save all products in a single database transaction
@@ -332,7 +349,16 @@ public class AlgorithmPersistenceService {
                 // Create Product record
                 Product product = new Product();
                 product.setName("Product-Split-" + orderName + "-" + productCounter);
-                product.setStatus(mapStatusToPackageStatus(split.getStatus()));
+
+                // Check for local delivery (empty route = origin equals destination)
+                // When algorithm returns empty route, it means product is already at destination
+                if (split.getAssignedFlightInstances() != null && split.getAssignedFlightInstances().isEmpty()) {
+                    // Local delivery - immediately mark as DELIVERED
+                    product.setStatus(PackageStatus.DELIVERED);
+                } else {
+                    product.setStatus(mapStatusToPackageStatus(split.getStatus()));
+                }
+
                 product.setWeight(1.0);
                 product.setVolume(1.0);
                 product.setOrder(orderEntity);
@@ -385,8 +411,17 @@ public class AlgorithmPersistenceService {
                 productCounter++;
             }
 
-            // Update order status
-            updateOrderStatus(orderName, PackageStatus.IN_TRANSIT);
+            // Update order status based on splits
+            // If ALL splits are local deliveries (empty routes), mark order as DELIVERED
+            // Otherwise, mark as IN_TRANSIT
+            boolean allLocalDeliveries = splits.stream()
+                .allMatch(split -> split.getAssignedFlightInstances() != null && split.getAssignedFlightInstances().isEmpty());
+
+            if (allLocalDeliveries) {
+                updateOrderStatus(orderName, PackageStatus.DELIVERED);
+            } else {
+                updateOrderStatus(orderName, PackageStatus.IN_TRANSIT);
+            }
         }
 
         // BATCH INSERT
