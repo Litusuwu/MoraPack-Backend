@@ -202,6 +202,8 @@ public class DataImportService {
                         .maxCapacity(schema.getMaxCapacity())
                         .transportTimeDays(schema.getTransportTime() / 24.0)
                         .dailyFrequency((int) Math.round(schema.getFrequencyPerDay()))
+                        .departureTime(schema.getDepartureTime())
+                        .arrivalTime(schema.getArrivalTime())
                         .status("ACTIVE")
                         .createdAt(java.time.LocalDateTime.now())
                         .originAirport(origin)

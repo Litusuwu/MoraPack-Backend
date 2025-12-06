@@ -175,8 +175,12 @@ public class DatabaseInputDataSource implements InputDataSource {
             }
         }
 
-        System.out.println("[DATABASE] Loaded " + orderSchemas.size() + " orders from database");
-        System.out.println("[DATABASE] Filtered out " + filteredCount + " orders outside time window");
+        System.out.println("[DATABASE] ===== ORDER LOADING SUMMARY =====");
+        System.out.println("[DATABASE] Total orders in DB: " + allOrders.size());
+        System.out.println("[DATABASE] Orders LOADED (within time window): " + orderSchemas.size());
+        System.out.println("[DATABASE] Orders FILTERED (outside time window): " + filteredCount);
+        System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
+        System.out.println("[DATABASE] ==========================================");
         return orderSchemas;
     }
 
@@ -236,6 +240,7 @@ public class DatabaseInputDataSource implements InputDataSource {
         FlightSchema flightSchema = new FlightSchema();
 
         flightSchema.setId(flight.getId());
+        flightSchema.setCode(flight.getCode()); // FIX: Set code for flight lookup
         flightSchema.setMaxCapacity(flight.getMaxCapacity());
         flightSchema.setUsedCapacity(0); // Initial capacity is 0 (will be updated by algorithm)
 
@@ -256,6 +261,10 @@ public class DatabaseInputDataSource implements InputDataSource {
 
         flightSchema.setOriginAirportSchema(originAirport);
         flightSchema.setDestinationAirportSchema(destAirport);
+
+        // Set departure and arrival times from database
+        flightSchema.setDepartureTime(flight.getDepartureTime());
+        flightSchema.setArrivalTime(flight.getArrivalTime());
 
         return flightSchema;
     }

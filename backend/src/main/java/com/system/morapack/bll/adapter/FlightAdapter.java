@@ -39,6 +39,8 @@ public class FlightAdapter {
         .maxCapacity(flight.getMaxCapacity())
         .transportTimeDays(flight.getTransportTimeDays())
         .dailyFrequency(flight.getDailyFrequency())
+        .departureTime(flight.getDepartureTime())
+        .arrivalTime(flight.getArrivalTime())
         .status(flight.getStatus())
         .createdAt(flight.getCreatedAt())
         .airplaneId(flight.getAirplane() != null ? flight.getAirplane().getId() : null)
@@ -58,6 +60,8 @@ public class FlightAdapter {
         .maxCapacity(schema.getMaxCapacity())
         .transportTimeDays(schema.getTransportTimeDays())
         .dailyFrequency(schema.getDailyFrequency())
+        .departureTime(schema.getDepartureTime())
+        .arrivalTime(schema.getArrivalTime())
         .status(schema.getStatus())
         .createdAt(schema.getCreatedAt());
 

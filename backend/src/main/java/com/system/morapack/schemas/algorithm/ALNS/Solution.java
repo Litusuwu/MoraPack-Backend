@@ -16,6 +16,7 @@ import java.util.Random;
 import java.util.PriorityQueue;
 import java.util.Comparator;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 
 public class Solution {
@@ -419,6 +420,238 @@ public class Solution {
     }
 
     /**
+     * NEW: SLA Metrics container for collapse simulation
+     */
+    public static class SLAMetrics {
+        public int totalProducts = 0;
+        public int assignedProducts = 0;
+        public int unassignedProducts = 0;
+        public int productsOnTime = 0;
+        public int productsLate = 0;
+        public double slaCompliancePercentage = 0.0;
+        public double slaViolationPercentage = 0.0;
+        
+        // Continental breakdown
+        public int continentalTotal = 0;
+        public int continentalOnTime = 0;
+        public int continentalLate = 0;
+        public double continentalCompliance = 0.0;
+        
+        // Intercontinental breakdown
+        public int intercontinentalTotal = 0;
+        public int intercontinentalOnTime = 0;
+        public int intercontinentalLate = 0;
+        public double intercontinentalCompliance = 0.0;
+        
+        // Detailed violations (limited to first 100 for performance)
+        public List<SLAViolationInfo> violations = new ArrayList<>();
+    }
+    
+    /**
+     * NEW: Individual SLA violation info
+     */
+    public static class SLAViolationInfo {
+        public String orderName;
+        public String originContinent;
+        public String destContinent;
+        public boolean isContinental;
+        public int slaMaxHours;
+        public double actualHours;
+        public double hoursOverdue;
+        public LocalDateTime orderDate;
+        public LocalDateTime deadline;
+        public LocalDateTime estimatedDelivery;
+    }
+
+    /**
+     * NEW: Calculate SLA metrics for collapse simulation
+     * Analyzes all assigned products and determines if they meet SLA:
+     * - Continental: 48 hours (2 days)
+     * - Intercontinental: 72 hours (3 days)
+     */
+    public SLAMetrics getSLAMetrics() {
+        SLAMetrics metrics = new SLAMetrics();
+        
+        Map<ProductSchema, ArrayList<FlightSchema>> productSolution = getProductLevelSolution();
+        
+        if (productSolution == null || productSolution.isEmpty()) {
+            System.out.println("No product solution available for SLA calculation");
+            return metrics;
+        }
+        
+        int violationCount = 0;
+        final int MAX_VIOLATIONS_TO_TRACK = 100;
+        
+        for (Map.Entry<ProductSchema, ArrayList<FlightSchema>> entry : productSolution.entrySet()) {
+            ProductSchema product = entry.getKey();
+            ArrayList<FlightSchema> route = entry.getValue();
+            
+            metrics.totalProducts++;
+            
+            // Find the order for this product to get SLA info
+            OrderSchema order = findOrderForProduct(product);
+            if (order == null) {
+                metrics.unassignedProducts++;
+                continue;
+            }
+            
+            if (route == null || route.isEmpty()) {
+                metrics.unassignedProducts++;
+                continue;
+            }
+            
+            metrics.assignedProducts++;
+            
+            // Determine if continental or intercontinental
+            CitySchema origin = order.getCurrentLocation();
+            CitySchema destination = order.getDestinationCitySchema();
+            
+            if (origin == null || destination == null) {
+                // Can't determine, assume continental
+                metrics.continentalTotal++;
+                metrics.continentalOnTime++;
+                metrics.productsOnTime++;
+                continue;
+            }
+            
+            boolean isContinental = origin.getContinent() == destination.getContinent();
+            int slaMaxHours = isContinental ? 48 : 72;  // 2 days or 3 days
+            
+            // Calculate actual delivery time
+            double actualDeliveryHours = calculateRouteDeliveryTime(route);
+            
+            // Add connection time (2 hours per connection)
+            if (route.size() > 1) {
+                actualDeliveryHours += (route.size() - 1) * 2.0;
+            }
+            
+            // Update continental/intercontinental breakdown
+            if (isContinental) {
+                metrics.continentalTotal++;
+            } else {
+                metrics.intercontinentalTotal++;
+            }
+            
+            // Check SLA compliance
+            boolean isOnTime = actualDeliveryHours <= slaMaxHours;
+            
+            if (isOnTime) {
+                metrics.productsOnTime++;
+                if (isContinental) {
+                    metrics.continentalOnTime++;
+                } else {
+                    metrics.intercontinentalOnTime++;
+                }
+            } else {
+                metrics.productsLate++;
+                if (isContinental) {
+                    metrics.continentalLate++;
+                } else {
+                    metrics.intercontinentalLate++;
+                }
+                
+                // Track violation details (limited)
+                if (violationCount < MAX_VIOLATIONS_TO_TRACK) {
+                    SLAViolationInfo violation = new SLAViolationInfo();
+                    violation.orderName = order.getName();
+                    violation.originContinent = origin.getContinent() != null ? origin.getContinent().toString() : "Unknown";
+                    violation.destContinent = destination.getContinent() != null ? destination.getContinent().toString() : "Unknown";
+                    violation.isContinental = isContinental;
+                    violation.slaMaxHours = slaMaxHours;
+                    violation.actualHours = actualDeliveryHours;
+                    violation.hoursOverdue = actualDeliveryHours - slaMaxHours;
+                    violation.orderDate = order.getOrderDate();
+                    violation.deadline = order.getDeliveryDeadline();
+                    
+                    // Calculate estimated delivery time
+                    if (order.getOrderDate() != null) {
+                        violation.estimatedDelivery = order.getOrderDate().plusHours((long) actualDeliveryHours);
+                    }
+                    
+                    metrics.violations.add(violation);
+                    violationCount++;
+                }
+            }
+        }
+        
+        // Calculate percentages
+        if (metrics.assignedProducts > 0) {
+            metrics.slaCompliancePercentage = (metrics.productsOnTime * 100.0) / metrics.assignedProducts;
+            metrics.slaViolationPercentage = (metrics.productsLate * 100.0) / metrics.assignedProducts;
+        }
+        
+        if (metrics.continentalTotal > 0) {
+            metrics.continentalCompliance = (metrics.continentalOnTime * 100.0) / metrics.continentalTotal;
+        }
+        
+        if (metrics.intercontinentalTotal > 0) {
+            metrics.intercontinentalCompliance = (metrics.intercontinentalOnTime * 100.0) / metrics.intercontinentalTotal;
+        }
+        
+        // Log summary
+        System.out.println("\n=== SLA METRICS SUMMARY ===");
+        System.out.println("Total products: " + metrics.totalProducts);
+        System.out.println("Assigned: " + metrics.assignedProducts);
+        System.out.println("On Time: " + metrics.productsOnTime + " (" + String.format("%.1f", metrics.slaCompliancePercentage) + "%)");
+        System.out.println("Late (SLA Violated): " + metrics.productsLate + " (" + String.format("%.1f", metrics.slaViolationPercentage) + "%)");
+        System.out.println("\nContinental (≤48h): " + metrics.continentalOnTime + "/" + metrics.continentalTotal + 
+                          " (" + String.format("%.1f", metrics.continentalCompliance) + "% on time)");
+        System.out.println("Intercontinental (≤72h): " + metrics.intercontinentalOnTime + "/" + metrics.intercontinentalTotal + 
+                          " (" + String.format("%.1f", metrics.intercontinentalCompliance) + "% on time)");
+        System.out.println("===========================\n");
+        
+        return metrics;
+    }
+    
+    /**
+     * Find the original order for a product
+     */
+    private OrderSchema findOrderForProduct(ProductSchema product) {
+        if (product == null || originalOrderSchemas == null) {
+            return null;
+        }
+        
+        // Try to find by order ID
+        Integer orderId = product.getOrderId();
+        if (orderId != null) {
+            for (OrderSchema order : originalOrderSchemas) {
+                if (order.getId() != null && order.getId().equals(orderId)) {
+                    return order;
+                }
+            }
+        }
+        
+        // Try to find by name pattern (Order-XXX-YYY)
+        String productName = product.getName();
+        if (productName != null) {
+            for (OrderSchema order : originalOrderSchemas) {
+                if (order.getName() != null && productName.contains(order.getName())) {
+                    return order;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Calculate total delivery time for a route in hours
+     */
+    private double calculateRouteDeliveryTime(ArrayList<FlightSchema> route) {
+        if (route == null || route.isEmpty()) {
+            return 0.0;
+        }
+        
+        double totalHours = 0.0;
+        for (FlightSchema flight : route) {
+            // transportTime is primitive double, always valid
+            totalHours += flight.getTransportTime();
+        }
+        
+        return totalHours;
+    }
+
+    /**
      * Generate flight instances for a route
      * Creates specific flight departures with timestamps for each hop in the route
      *
@@ -440,29 +673,26 @@ public class Solution {
         for (int i = 0; i < route.size(); i++) {
             FlightSchema flight = route.get(i);
 
-            // Calculate the next available departure after current time
-            // Assume flights depart every 24/dailyFrequency hours
-            Integer dailyFrequency = flight.getDailyFrequency();
-            if (dailyFrequency == null || dailyFrequency <= 0) {
-                dailyFrequency = 1; // Default to once per day
+            // Get the real departure time from the flight (from flights.txt)
+            LocalTime flightDepartureTime = flight.getDepartureTime();
+            if (flightDepartureTime == null) {
+                // Fallback to default if not available
+                flightDepartureTime = LocalTime.of(0, 0);
             }
 
-            double hoursPerFlight = 24.0 / dailyFrequency;
+            // Find the next occurrence of this flight's departure time after currentTime
+            LocalDateTime candidateDeparture = currentTime.toLocalDate()
+                .atTime(flightDepartureTime);
 
-            // Find next departure slot
-            // For simplicity, use hour 0, 6, 12, 18 for frequency 4, etc.
-            int departureHour = 0;
-            if (dailyFrequency > 1) {
-                departureHour = ((int) (currentTime.getHour() / hoursPerFlight) + 1) * (int) hoursPerFlight;
-                if (departureHour >= 24) {
-                    departureHour = 0;
-                    dayCounter++;
-                }
+            // If the candidate is before or equal to current time, move to next day
+            if (!candidateDeparture.isAfter(currentTime)) {
+                candidateDeparture = candidateDeparture.plusDays(1);
             }
 
-            // Calculate departure and arrival times
-            LocalDateTime departureTime = orderCreationTime.plusDays(dayCounter)
-                .withHour(departureHour).withMinute(0).withSecond(0);
+            LocalDateTime departureTime = candidateDeparture;
+
+            // Update day counter
+            dayCounter = (int) ChronoUnit.DAYS.between(orderCreationTime.toLocalDate(), departureTime.toLocalDate());
 
             // Handle null transport time
             Double transportTimeDays = flight.getTransportTimeDays();

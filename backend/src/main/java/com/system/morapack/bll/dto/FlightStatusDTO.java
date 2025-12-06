@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalTime;
+
 /**
  * DTO for flight status information (used in map display)
  */
@@ -26,6 +28,10 @@ public class FlightStatusDTO {
     private Integer assignedProducts;
     private Integer assignedOrders;
     private Boolean isActive;
+    
+    // Flight schedule times (HH:mm format from flights.txt)
+    private LocalTime departureTime;
+    private LocalTime arrivalTime;
 
     @Data
     @Builder

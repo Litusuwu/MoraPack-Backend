@@ -199,6 +199,98 @@ public class DataLoadAPI {
     }
 
     /**
+     * Refresh orders for Daily Simulation WITHOUT clearing existing orders
+     * 
+     * This endpoint is used when re-running the algorithm during Daily simulation:
+     * - Does NOT clear existing orders (preserves manual orders and previous loads)
+     * - Loads orders within the 10-minute window from startTime
+     * - Skips duplicates (orders with same ID already in DB)
+     * - Perfect for incremental order loading during simulation
+     * 
+     * Example: POST /api/data/refresh-orders-for-daily?startTime=2025-01-02T00:10:00
+     * 
+     * @param startTime Required: Start time of the current simulation window (ISO format string)
+     * @return Statistics about the data loading process
+     */
+    @PostMapping("/refresh-orders-for-daily")
+    public ResponseEntity<Map<String, Object>> refreshOrdersForDailySimulation(
+            @RequestParam String startTime) {
+
+        try {
+            System.out.println("========================================");
+            System.out.println("API: REFRESH ORDERS FOR DAILY SIMULATION");
+            System.out.println("Received startTime param: " + startTime);
+            System.out.println("(NOT clearing existing orders - checking duplicates)");
+            System.out.println("========================================");
+
+            // Parse startTime (handle various formats including timezone)
+            LocalDateTime parsedStartTime;
+            try {
+                String cleanedTime = startTime.replaceAll("\\.\\d{3}Z$", "").replaceAll("Z$", "");
+                parsedStartTime = LocalDateTime.parse(cleanedTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                System.out.println("Parsed start time: " + parsedStartTime);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid date format. Expected ISO 8601 format (e.g., 2025-01-02T00:00:00): " + e.getMessage());
+            }
+
+            // Calculate end time: startTime + 10 minutes (fixed timeframe)
+            final int TIMEFRAME_MINUTES = 10;
+            LocalDateTime endTime = parsedStartTime.plusMinutes(TIMEFRAME_MINUTES);
+
+            System.out.println("Time Window: " + parsedStartTime + " to " + endTime);
+
+            // NOTE: We do NOT clear orders here - just load new ones with duplicate checking
+            System.out.println("Loading orders from files (with duplicate check)...");
+            String dirPath = getDefaultDataDirectory();
+            
+            // skipDuplicateCheck = false (default) means we CHECK for duplicates
+            DataLoadService.LoadOrdersResult result =
+                dataLoadService.loadOrdersFromFiles(dirPath, parsedStartTime, endTime, false);
+
+            // Build response
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", result.success);
+            response.put("message", result.success ?
+                "Orders refreshed successfully (duplicates skipped)" : result.errorMessage);
+            
+            // Statistics
+            Map<String, Object> statistics = new HashMap<>();
+            statistics.put("ordersLoaded", result.ordersLoaded);
+            statistics.put("ordersCreated", result.ordersCreated);
+            statistics.put("ordersFiltered", result.ordersFiltered);
+            statistics.put("duplicatesSkipped", result.ordersLoaded - result.ordersCreated);
+            statistics.put("customersCreated", result.customersCreated);
+            statistics.put("parseErrors", result.parseErrors);
+            statistics.put("fileErrors", result.fileErrors);
+            statistics.put("durationSeconds", result.durationSeconds);
+            response.put("statistics", statistics);
+
+            // Time window info
+            response.put("timeWindow", Map.of(
+                "startTime", parsedStartTime.toString(),
+                "endTime", endTime.toString(),
+                "durationMinutes", TIMEFRAME_MINUTES
+            ));
+
+            System.out.println("✓ Created " + result.ordersCreated + " new orders (skipped " + 
+                (result.ordersLoaded - result.ordersCreated) + " duplicates)");
+            System.out.println("========================================");
+
+            return result.success ?
+                ResponseEntity.ok(response) :
+                ResponseEntity.internalServerError().body(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to refresh orders: " + e.getMessage());
+            errorResponse.put("error", e.getClass().getSimpleName());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
      * Get data loading status and statistics
      * Shows how many airports, flights and orders are currently in the database
      *

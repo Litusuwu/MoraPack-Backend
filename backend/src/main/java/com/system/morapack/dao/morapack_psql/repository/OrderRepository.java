@@ -26,4 +26,16 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
   @Modifying
   @Query("DELETE FROM Order o WHERE o.id IN :ids")
   void deleteAllByIdIn(List<Integer> ids);
+
+  // Performance optimization: Load orders with products in one query (prevents N+1)
+  @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.products WHERE o.status IN :statuses")
+  List<Order> findByStatusInWithProducts(@org.springframework.data.repository.query.Param("statuses") List<PackageStatus> statuses);
+
+  // Find oldest order by creation date (for simulation start date calculation)
+  Optional<Order> findTopByOrderByCreationDateAsc();
+
+  // Native delete all - doesn't load entities into memory (prevents OOM)
+  @Modifying
+  @Query(value = "DELETE FROM orders", nativeQuery = true)
+  void deleteAllNative();
 }
