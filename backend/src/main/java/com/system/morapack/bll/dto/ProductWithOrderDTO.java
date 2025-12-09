@@ -20,6 +20,8 @@ public class ProductWithOrderDTO {
     private PackageStatus status;
     private String assignedFlightInstance;
     private LocalDateTime createdAt;
+    // Delivery date from the related order (if available)
+    private LocalDateTime deliveredAt;
     private OrderInfo order;
 
     @Data

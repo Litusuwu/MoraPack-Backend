@@ -174,6 +174,7 @@ public class OrderQueryController {
             .status(product.getStatus())
             .assignedFlightInstance(product.getAssignedFlightInstance())
             .createdAt(product.getCreationDate())
+            .deliveredAt(product.getOrder() != null ? product.getOrder().getDeliveryDate() : null)
             .order(ProductWithOrderDTO.OrderInfo.builder()
                 .id(product.getOrder().getId())
                 .name(product.getOrder().getName())
