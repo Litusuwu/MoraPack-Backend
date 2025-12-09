@@ -11,6 +11,8 @@ import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
 import com.system.morapack.schemas.PackageStatus;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -27,6 +29,7 @@ public class FlightQueryController {
     private final FlightService flightService;
     private final ProductService productService;
     private final OrderService orderService;
+    private static final Logger logger = LoggerFactory.getLogger(FlightQueryController.class);
 
     /**
      * Get all flights with their current status and utilization
@@ -257,6 +260,18 @@ public class FlightQueryController {
                 .map(p -> p.getOrder().getId())
                 .distinct()
                 .count() : 0;
+
+        // Log missing codeIATA to help diagnose mapping problems
+        try {
+            if (flight.getOriginAirport() == null || flight.getOriginAirport().getCodeIATA() == null || flight.getOriginAirport().getCodeIATA().trim().isEmpty()) {
+                logger.warn("Missing origin.codeIATA for flight id={} originAirportId={}", flight.getId(), flight.getOriginAirport() != null ? flight.getOriginAirport().getId() : null);
+            }
+            if (flight.getDestinationAirport() == null || flight.getDestinationAirport().getCodeIATA() == null || flight.getDestinationAirport().getCodeIATA().trim().isEmpty()) {
+                logger.warn("Missing destination.codeIATA for flight id={} destinationAirportId={}", flight.getId(), flight.getDestinationAirport() != null ? flight.getDestinationAirport().getId() : null);
+            }
+        } catch (Exception e) {
+            logger.debug("Error checking airport IATA for flight id={}: {}", flight.getId(), e.getMessage());
+        }
 
         return FlightStatusDTO.builder()
             .id(flight.getId())

@@ -22,7 +22,10 @@ public class FlightService {
   }
 
   public List<Flight> fetch(List<Integer> ids) {
-    if (ids == null || ids.isEmpty()) return repository.findAll();
+    if (ids == null || ids.isEmpty()) {
+      // Use the optimized query that fetches related airports to avoid lazy-loading gaps
+      return repository.findAllWithAirports();
+    }
     return repository.findByIdIn(ids);
   }
 

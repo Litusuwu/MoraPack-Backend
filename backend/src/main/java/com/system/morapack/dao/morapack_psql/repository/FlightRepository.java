@@ -37,5 +37,8 @@ public interface FlightRepository extends JpaRepository<Flight, Integer> {
   @Query("SELECT COALESCE(SUM(f.maxCapacity), 0) FROM Flight f")
   double sumTotalCapacity();
 
+  @Query("SELECT f FROM Flight f JOIN FETCH f.originAirport JOIN FETCH f.destinationAirport")
+  List<Flight> findAllWithAirports();
+
 
 }
