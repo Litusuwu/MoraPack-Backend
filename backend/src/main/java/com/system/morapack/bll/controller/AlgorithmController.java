@@ -2,6 +2,8 @@ package com.system.morapack.bll.controller;
 
 import com.system.morapack.bll.service.AlgorithmPersistenceService;
 import com.system.morapack.config.Constants;
+import com.system.morapack.config.DataSourceOverride;
+import com.system.morapack.dao.morapack_psql.repository.ProductRepository;
 import com.system.morapack.schemas.*;
 import com.system.morapack.schemas.CollapseResultSchema;
 import com.system.morapack.schemas.algorithm.ALNS.Solution;
@@ -23,6 +25,27 @@ public class AlgorithmController {
   
   // NEW: Data load service for collapse scenario
   private final com.system.morapack.bll.service.DataLoadService dataLoadService;
+  
+  // NEW: Simulation time service for state updates (PENDING -> IN_TRANSIT -> ARRIVED)
+  private final com.system.morapack.bll.service.SimulationTimeService simulationTimeService;
+  
+  // NEW: Product repository for SLA violation checks
+  private final ProductRepository productRepository;
+
+  // ==================== COLLAPSE VISUAL SIMULATION STATE ====================
+  // These track state across multiple calls to executeCollapseVisualDay()
+  // Thread safety note: assumes single simulation at a time per server instance
+  
+  private volatile boolean collapseVisualInitialized = false;
+  private volatile LocalDateTime collapseVisualSimStart = null;
+  private volatile int collapseVisualTotalOrdersLoaded = 0;
+  private volatile int collapseVisualPreviousBacklog = 0;
+  private volatile int collapseVisualConsecutiveGrowingDays = 0;
+  
+  // Collapse thresholds (same as batch collapse)
+  private static final double COLLAPSE_THRESHOLD_PERCENT = 10.0;
+  private static final int MAX_GROWING_BACKLOG_DAYS = 5;
+  private static final int MAX_SIMULATION_DAYS = 365;
 
   /**
    * Helper class to group flights by route
@@ -270,8 +293,22 @@ public class AlgorithmController {
 
       // Execute ALNS with time window
       System.out.println("\n=== STARTING ALNS EXECUTION ===");
-      Solution alnsSolution = new Solution(simStart, simEnd);
-      alnsSolution.solve();
+      
+      // FORCE DATABASE MODE if requested: This ensures we only load unassigned orders from the DB
+      // instead of re-loading everything from files. This prevents deadlocks and re-assignment of completed orders.
+      if (Boolean.TRUE.equals(request.getUseDatabase())) {
+          DataSourceOverride.setOverride(Constants.DataSourceMode.DATABASE);
+      }
+      
+      Solution alnsSolution;
+      try {
+          alnsSolution = new Solution(simStart, simEnd);
+          alnsSolution.solve();
+      } finally {
+          if (Boolean.TRUE.equals(request.getUseDatabase())) {
+              DataSourceOverride.clearOverride();
+          }
+      }
 
       LocalDateTime executionEndTime = LocalDateTime.now();
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
@@ -453,6 +490,20 @@ public class AlgorithmController {
     }
 
     return splits;
+  }
+
+  /**
+   * Parse latitude/longitude string to Double
+   */
+  private Double parseLatLng(String value) {
+    if (value == null || value.trim().isEmpty()) {
+      return null;
+    }
+    try {
+      return Double.parseDouble(value);
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 
   /**
@@ -1019,29 +1070,34 @@ public class AlgorithmController {
    * - Continental orders: must be delivered within 2 days (48 hours)
    * - Intercontinental orders: must be delivered within 3 days (72 hours)
    * - System collapses when ANY product cannot be assigned within SLA
+   * 
+   * ACCUMULATIVE LOGIC:
+   * - Orders are loaded incrementally day by day
+   * - Orders NOT deleted between days - they accumulate in the database
+   * - Algorithm runs on ALL pending orders (new + previously unassigned)
+   * - Collapse occurs when backlog grows uncontrollably
    */
   public CollapseResultSchema executeCollapseScenario(AlgorithmRequest request) {
     LocalDateTime executionStartTime = LocalDateTime.now();
     
     System.out.println("===========================================");
-    System.out.println("EXECUTING COLLAPSE SCENARIO (INCREMENTAL)");
+    System.out.println("EXECUTING COLLAPSE SCENARIO (ACCUMULATIVE)");
     System.out.println("SLA Rules:");
     System.out.println("  - Continental: ≤ 48 hours (2 days)");
     System.out.println("  - Intercontinental: ≤ 72 hours (3 days)");
-    System.out.println("  - Collapse: When unassigned products exceed threshold");
-    System.out.println("  - Mode: Day-by-day simulation (fast)");
+    System.out.println("  - Mode: ACCUMULATIVE - orders pile up until collapse");
     System.out.println("===========================================");
     
     LocalDateTime simStart = request.getSimulationStartTime();
     final int MAX_DAYS = 365; // Maximum days to simulate before giving up
     
-    // Collapse threshold: if more than X% of products can't be assigned in a day, it's collapse
-    // Using 5% as threshold - some orders may have data issues (invalid routes, etc.)
-    final double COLLAPSE_THRESHOLD_PERCENT = 5.0;
+    // Collapse threshold: percentage of TOTAL ACCUMULATED products that are unassigned
+    final double COLLAPSE_THRESHOLD_PERCENT = 10.0; // 10% of total backlog unassigned = collapse
     
-    // Track consecutive days with problems
-    int consecutiveProblemDays = 0;
-    final int MAX_CONSECUTIVE_PROBLEM_DAYS = 3; // Need 3 consecutive bad days to declare collapse
+    // Also track consecutive days with growing backlog
+    int consecutiveGrowingBacklogDays = 0;
+    final int MAX_GROWING_BACKLOG_DAYS = 5; // 5 days of growing backlog = collapse
+    int previousUnassigned = 0;
     
     boolean hasCollapsed = false;
     String collapseReason = "NONE";
@@ -1049,10 +1105,10 @@ public class AlgorithmController {
     LocalDateTime collapseTime = null;
     
     // Cumulative statistics
-    int totalOrdersProcessed = 0;
-    int totalProductsProcessed = 0;
-    int totalAssignedProducts = 0;
-    int totalUnassignedProducts = 0;
+    int totalOrdersLoaded = 0;
+    int totalProductsInSystem = 0;  // All products ever loaded
+    int currentAssignedProducts = 0;
+    int currentUnassignedProducts = 0;
     
     // SLA tracking
     int productsOnTime = 0;
@@ -1065,13 +1121,14 @@ public class AlgorithmController {
     List<CollapseResultSchema.DayStatistics> dailyStats = new ArrayList<>();
     
     try {
-      // STEP 1: Clear existing data
+      // STEP 1: Clear existing data (start fresh)
       System.out.println("\n=== STEP 1: CLEARING EXISTING DATA ===");
       dataLoadService.clearAllOrders();
       System.out.println("Database cleared successfully");
       
-      // STEP 2: Simulate day by day
-      System.out.println("\n=== STEP 2: SIMULATING DAY BY DAY ===");
+      // STEP 2: Simulate day by day with ACCUMULATION
+      System.out.println("\n=== STEP 2: SIMULATING DAY BY DAY (ACCUMULATIVE) ===");
+      System.out.println("Orders will ACCUMULATE - unassigned orders carry over to next day");
       
       for (int day = 1; day <= MAX_DAYS && !hasCollapsed; day++) {
         LocalDateTime dayStart = simStart.plusDays(day - 1);
@@ -1079,7 +1136,7 @@ public class AlgorithmController {
         
         System.out.println("\n--- Day " + day + ": " + dayStart.toLocalDate() + " ---");
         
-        // Load orders for this day only
+        // Load NEW orders for this day (they ADD to existing orders in DB)
         com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
             dataLoadService.loadOrdersFromFiles(
                 com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
@@ -1088,26 +1145,20 @@ public class AlgorithmController {
                 false  // Check for duplicates
             );
         
-        if (!loadResult.success) {
-          System.out.println("  No orders for this day or load failed");
-          continue;
-        }
+        int newOrdersToday = loadResult.ordersCreated;
+        totalOrdersLoaded += newOrdersToday;
         
-        int ordersToday = loadResult.ordersCreated;
-        if (ordersToday == 0) {
-          System.out.println("  No new orders for this day");
-          continue;
-        }
+        System.out.println("  New orders loaded today: " + newOrdersToday);
+        System.out.println("  Total orders in system: " + totalOrdersLoaded);
         
-        System.out.println("  Orders loaded: " + ordersToday);
-        totalOrdersProcessed += ordersToday;
-        
-        // Execute algorithm for this day's window (4-day horizon as per Constants.HORIZON_DAYS)
+        // Execute algorithm on ALL orders in the system (from simStart to current horizon)
+        // This includes previously unassigned orders!
+        LocalDateTime algoStart = simStart;  // Start from beginning
         LocalDateTime algoEnd = dayStart.plusDays(Constants.HORIZON_DAYS);
         
-        System.out.println("  Executing ALNS from " + dayStart + " to " + algoEnd);
+        System.out.println("  Executing ALNS on ALL orders from " + algoStart.toLocalDate() + " to " + algoEnd.toLocalDate());
         
-        Solution alnsSolution = new Solution(dayStart, algoEnd);
+        Solution alnsSolution = new Solution(algoStart, algoEnd);
         alnsSolution.solve();
         
         // Count results from order splits
@@ -1115,7 +1166,7 @@ public class AlgorithmController {
         int dayAssigned = 0;
         int dayUnassigned = 0;
         int dayTotal = 0;
-        int dayLocalDelivery = 0;  // Products where origin = destination (no flights needed)
+        int dayLocalDelivery = 0;
         
         System.out.println("  OrderSplits returned: " + (orderSplits != null ? orderSplits.size() : "null") + " orders");
         
@@ -1124,105 +1175,119 @@ public class AlgorithmController {
             for (Solution.OrderSplitInfo split : splits) {
               dayTotal += split.quantity;
               
-              // Check assignment status:
-              // - assignedRoute != null means it was processed
-              // - Empty route (size 0) means LOCAL DELIVERY (origin = destination, no flights needed)
-              // - Route with flights means normal delivery
-              // - assignedRoute == null means truly unassigned
               if (split.assignedRoute != null) {
                 if (split.assignedRoute.isEmpty()) {
-                  // Local delivery - origin equals destination, no flights needed
-                  // This counts as ASSIGNED (successfully handled)
                   dayAssigned += split.quantity;
                   dayLocalDelivery += split.quantity;
                 } else {
-                  // Normal delivery with flights
                   dayAssigned += split.quantity;
                 }
               } else {
-                // Truly unassigned - no route could be found
                 dayUnassigned += split.quantity;
               }
             }
           }
-        } else {
-          // If orderSplits is empty but we loaded orders, something is wrong
-          System.out.println("  WARNING: No order splits returned from algorithm");
-          System.out.println("  This may indicate no valid routes found for loaded orders");
           
-          // Don't count this as collapse - it could be a data issue, not capacity
-          // Continue to next day
+          // CRITICAL: Persist assigned products to DB so next day sees filled capacities
+          // This makes the simulation REALISTIC - flights fill up over time
+          try {
+            List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits =
+                convertToOrderSplitsWithInstances(orderSplits);
+            
+            if (!persistenceSplits.isEmpty()) {
+              int persisted = persistenceService.persistSolutionWithInstances(persistenceSplits);
+              System.out.println("  Persisted " + persisted + " products to DB (flights now have used capacity)");
+            }
+          } catch (Exception e) {
+            System.out.println("  WARNING: Failed to persist day " + day + " results: " + e.getMessage());
+            // Continue simulation even if persistence fails
+          }
+          
+        } else if (newOrdersToday > 0) {
+          System.out.println("  WARNING: No order splits returned from algorithm");
+          continue;
+        } else {
+          System.out.println("  No orders to process today");
           continue;
         }
         
-        totalProductsProcessed += dayTotal;
-        totalAssignedProducts += dayAssigned;
-        totalUnassignedProducts += dayUnassigned;
+        // Update current state
+        totalProductsInSystem = dayTotal;  // Total products algorithm sees
+        currentAssignedProducts = dayAssigned;
+        currentUnassignedProducts = dayUnassigned;
         
-        double dayAssignmentRate = dayTotal > 0 ? (dayAssigned * 100.0 / dayTotal) : 100.0;
+        double assignmentRate = dayTotal > 0 ? (dayAssigned * 100.0 / dayTotal) : 100.0;
+        double unassignedRate = dayTotal > 0 ? (dayUnassigned * 100.0 / dayTotal) : 0.0;
         
-        System.out.println("  Products: " + dayTotal + " total, " + dayAssigned + " assigned" + 
-                          (dayLocalDelivery > 0 ? " (" + dayLocalDelivery + " local)" : "") + 
-                          ", " + dayUnassigned + " unassigned");
-        System.out.println("  Assignment rate: " + String.format("%.1f", dayAssignmentRate) + "%");
+        System.out.println("  Total products in system: " + dayTotal);
+        System.out.println("  Assigned: " + dayAssigned + (dayLocalDelivery > 0 ? " (" + dayLocalDelivery + " local)" : ""));
+        System.out.println("  Unassigned (backlog): " + dayUnassigned);
+        System.out.println("  Assignment rate: " + String.format("%.1f", assignmentRate) + "%");
         
         // Track daily statistics
         dailyStats.add(CollapseResultSchema.DayStatistics.builder()
             .dayNumber(day)
             .dayStart(dayStart)
-            .ordersProcessed(ordersToday)
+            .ordersProcessed(newOrdersToday)
             .productsAssigned(dayAssigned)
             .productsUnassigned(dayUnassigned)
-            .assignmentRate(dayAssignmentRate)
-            .productsOnTime(dayAssigned)  // Assigned = on time (algorithm respects SLA)
-            .productsLate(dayUnassigned)  // Unassigned = late (can't meet SLA)
-            .slaComplianceRate(dayAssignmentRate)
+            .assignmentRate(assignmentRate)
+            .productsOnTime(dayAssigned)
+            .productsLate(dayUnassigned)
+            .slaComplianceRate(assignmentRate)
             .build());
         
-        // Calculate daily unassigned percentage
-        double dayUnassignedPercent = dayTotal > 0 ? (dayUnassigned * 100.0 / dayTotal) : 0.0;
+        // CHECK FOR COLLAPSE: Two conditions
         
-        // Check for collapse using threshold-based logic
-        // A day is "problematic" if more than COLLAPSE_THRESHOLD_PERCENT products can't be assigned
-        if (dayUnassignedPercent > COLLAPSE_THRESHOLD_PERCENT) {
-          consecutiveProblemDays++;
-          System.out.println("  WARNING: " + String.format("%.1f", dayUnassignedPercent) + 
-                           "% unassigned (threshold: " + COLLAPSE_THRESHOLD_PERCENT + "%)");
-          System.out.println("  Consecutive problem days: " + consecutiveProblemDays + "/" + MAX_CONSECUTIVE_PROBLEM_DAYS);
+        // Condition 1: Unassigned percentage exceeds threshold
+        if (unassignedRate > COLLAPSE_THRESHOLD_PERCENT) {
+          hasCollapsed = true;
+          collapseReason = "SLA_BREACH";
+          collapseDay = day;
+          collapseTime = dayStart;
           
-          // Collapse only after multiple consecutive problem days
-          if (consecutiveProblemDays >= MAX_CONSECUTIVE_PROBLEM_DAYS) {
+          System.out.println("\n!!! COLLAPSE DETECTED ON DAY " + day + " !!!");
+          System.out.println("  Unassigned rate: " + String.format("%.1f", unassignedRate) + "% > threshold " + COLLAPSE_THRESHOLD_PERCENT + "%");
+          System.out.println("  " + dayUnassigned + " products cannot be delivered within SLA");
+          
+          productsLate = dayUnassigned;
+          productsOnTime = dayAssigned;
+          break;
+        }
+        
+        // Condition 2: Backlog is growing continuously
+        if (dayUnassigned > previousUnassigned && previousUnassigned > 0) {
+          consecutiveGrowingBacklogDays++;
+          System.out.println("  WARNING: Backlog growing (" + previousUnassigned + " -> " + dayUnassigned + ")");
+          System.out.println("  Consecutive growing days: " + consecutiveGrowingBacklogDays + "/" + MAX_GROWING_BACKLOG_DAYS);
+          
+          if (consecutiveGrowingBacklogDays >= MAX_GROWING_BACKLOG_DAYS) {
             hasCollapsed = true;
-            collapseReason = "SLA_BREACH";
+            collapseReason = "CAPACITY_EXHAUSTED";
             collapseDay = day;
             collapseTime = dayStart;
             
             System.out.println("\n!!! COLLAPSE DETECTED ON DAY " + day + " !!!");
-            System.out.println("  System has had " + MAX_CONSECUTIVE_PROBLEM_DAYS + " consecutive days with >" + 
-                             COLLAPSE_THRESHOLD_PERCENT + "% unassigned products");
-            System.out.println("  Total unassigned so far: " + totalUnassignedProducts);
+            System.out.println("  Backlog has been growing for " + MAX_GROWING_BACKLOG_DAYS + " consecutive days");
+            System.out.println("  System cannot keep up with demand");
             
-            productsLate = totalUnassignedProducts;
-            productsOnTime = totalAssignedProducts;
-            
-            break; // Stop simulation
+            productsLate = dayUnassigned;
+            productsOnTime = dayAssigned;
+            break;
           }
-        } else {
-          // Reset counter if day is OK
-          if (consecutiveProblemDays > 0) {
-            System.out.println("  Day OK - resetting problem counter");
-          }
-          consecutiveProblemDays = 0;
+        } else if (dayUnassigned < previousUnassigned) {
+          consecutiveGrowingBacklogDays = 0; // Reset if backlog is shrinking
         }
         
-        productsOnTime = totalAssignedProducts;
-        productsLate = totalUnassignedProducts;
+        previousUnassigned = dayUnassigned;
+        productsOnTime = dayAssigned;
+        productsLate = dayUnassigned;
         
         // Progress update every 10 days
         if (day % 10 == 0) {
           long elapsed = ChronoUnit.SECONDS.between(executionStartTime, LocalDateTime.now());
           System.out.println("\n  [Progress] Day " + day + "/" + MAX_DAYS + 
-                           ", Time: " + elapsed + "s, Orders: " + totalOrdersProcessed);
+                           ", Time: " + elapsed + "s, Backlog: " + dayUnassigned);
         }
       }
       
@@ -1236,16 +1301,16 @@ public class AlgorithmController {
       LocalDateTime executionEndTime = LocalDateTime.now();
       long executionTime = ChronoUnit.SECONDS.between(executionStartTime, executionEndTime);
       
-      double unassignedPercentage = totalProductsProcessed > 0 
-          ? (totalUnassignedProducts * 100.0) / totalProductsProcessed 
+      double unassignedPercentage = totalProductsInSystem > 0 
+          ? (currentUnassignedProducts * 100.0) / totalProductsInSystem 
           : 0.0;
       
-      double slaCompliance = totalProductsProcessed > 0
-          ? (productsOnTime * 100.0) / totalProductsProcessed
+      double slaCompliance = totalProductsInSystem > 0
+          ? (currentAssignedProducts * 100.0) / totalProductsInSystem
           : 100.0;
       
-      double slaViolation = totalProductsProcessed > 0
-          ? (productsLate * 100.0) / totalProductsProcessed
+      double slaViolation = totalProductsInSystem > 0
+          ? (currentUnassignedProducts * 100.0) / totalProductsInSystem
           : 0.0;
       
       System.out.println("\n===========================================");
@@ -1256,20 +1321,20 @@ public class AlgorithmController {
         System.out.println("Collapse reason: " + collapseReason);
       }
       System.out.println("Days simulated: " + dailyStats.size());
-      System.out.println("Total orders: " + totalOrdersProcessed);
-      System.out.println("Total products: " + totalProductsProcessed);
-      System.out.println("Assigned (on time): " + totalAssignedProducts);
-      System.out.println("Unassigned (SLA violated): " + totalUnassignedProducts);
+      System.out.println("Total orders loaded: " + totalOrdersLoaded);
+      System.out.println("Total products in system: " + totalProductsInSystem);
+      System.out.println("Assigned (on time): " + currentAssignedProducts);
+      System.out.println("Unassigned (SLA violated): " + currentUnassignedProducts);
       System.out.println("SLA compliance: " + String.format("%.1f", slaCompliance) + "%");
       System.out.println("Execution time: " + executionTime + " seconds");
       System.out.println("===========================================\n");
       
       String message;
       if (hasCollapsed) {
-        message = "System collapsed on day " + collapseDay + ": " + productsLate + 
+        message = "System collapsed on day " + collapseDay + ": " + currentUnassignedProducts + 
                   " products cannot be delivered within SLA (2 days continental / 3 days intercontinental)";
       } else {
-        message = "Simulation completed: All " + totalAssignedProducts + 
+        message = "Simulation completed: All " + currentAssignedProducts + 
                   " products can be delivered within SLA after " + dailyStats.size() + " days";
       }
       
@@ -1285,18 +1350,18 @@ public class AlgorithmController {
           .executionTimeSeconds(executionTime)
           .simulationStartTime(simStart)
           .totalDaysSimulated(dailyStats.size())
-          .totalOrdersProcessed(totalOrdersProcessed)
-          .totalProductsProcessed(totalProductsProcessed)
-          .assignedProducts(totalAssignedProducts)
-          .unassignedProducts(totalUnassignedProducts)
+          .totalOrdersProcessed(totalOrdersLoaded)
+          .totalProductsProcessed(totalProductsInSystem)
+          .assignedProducts(currentAssignedProducts)
+          .unassignedProducts(currentUnassignedProducts)
           .unassignedPercentage(unassignedPercentage)
           // SLA metrics
           .productsOnTime(productsOnTime)
           .productsLate(productsLate)
           .slaCompliancePercentage(slaCompliance)
           .slaViolationPercentage(slaViolation)
-          .slaThresholdUsed(COLLAPSE_THRESHOLD_PERCENT)  // Threshold used for collapse detection
-          // Continental breakdown (simplified - we track at day level)
+          .slaThresholdUsed(COLLAPSE_THRESHOLD_PERCENT)
+          // Continental breakdown (simplified)
           .continentalOrdersTotal(continentalTotal)
           .continentalOrdersOnTime(continentalOnTime)
           .continentalOrdersLate(0)
@@ -1305,7 +1370,7 @@ public class AlgorithmController {
           .intercontinentalOrdersOnTime(intercontinentalOnTime)
           .intercontinentalOrdersLate(0)
           .intercontinentalSlaCompliance(100.0)
-          .slaViolations(null)  // Detailed violations not tracked in incremental mode
+          .slaViolations(null)
           .dailyStatistics(dailyStats)
           .build();
           
@@ -1334,4 +1399,467 @@ public class AlgorithmController {
           .build();
     }
   }
+
+  // ==================== COLLAPSE VISUAL SIMULATION (Day-by-Day) ====================
+
+  /**
+   * Initialize the visual collapse simulation
+   * Must be called ONCE before the first call to executeCollapseVisualDay()
+   * Clears database and resets all state
+   * 
+   * @param simulationStartTime The start time for simulation (default: 2025-01-02T00:00:00)
+   * @return Success status
+   */
+  public CollapseVisualDayResultSchema initCollapseVisualSimulation(LocalDateTime simulationStartTime) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    try {
+      System.out.println("===========================================");
+      System.out.println("INITIALIZING COLLAPSE VISUAL SIMULATION");
+      System.out.println("Start time: " + simulationStartTime);
+      System.out.println("===========================================");
+      
+      // Try to clear existing data, but continue if it fails
+      try {
+        dataLoadService.clearAllOrders();
+        System.out.println("Database cleared successfully");
+      } catch (Exception e) {
+        System.out.println("WARNING: Could not clear orders (may have FK constraints): " + e.getMessage());
+        System.out.println("Continuing with existing data...");
+      }
+      
+      // Reset state
+      collapseVisualInitialized = true;
+      collapseVisualSimStart = simulationStartTime;
+      collapseVisualTotalOrdersLoaded = 0;
+      collapseVisualPreviousBacklog = 0;
+      collapseVisualConsecutiveGrowingDays = 0;
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message("Collapse visual simulation initialized. Ready to process days.")
+          .dayNumber(0)
+          .dayStart(simulationStartTime)
+          .dayEnd(simulationStartTime)
+          .hasReachedCollapse(false)
+          .continueSimulation(true)
+          .totalDaysSimulated(0)
+          .totalOrdersLoaded(0)
+          .totalProductsInSystem(0)
+          .cumulativeAssigned(0)
+          .cumulativeBacklog(0)
+          .cumulativeAssignmentRate(100.0)
+          .consecutiveGrowingDays(0)
+          .backlogIsGrowing(false)
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          .collapseProgress(0.0)
+          .statusLabel("INITIALIZING")
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! INIT FAILED: " + e.getMessage());
+      e.printStackTrace();
+      
+      collapseVisualInitialized = false;
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Failed to initialize: " + e.getMessage())
+          .hasReachedCollapse(false)
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Execute ONE DAY of the visual collapse simulation
+   * Call this repeatedly for each day until hasReachedCollapse=true or continueSimulation=false
+   * 
+   * This method:
+   * 1. Loads orders for the specified day (adds to DB)
+   * 2. Runs ALNS on all orders (new + backlog)
+   * 3. Persists results
+   * 4. Checks collapse conditions
+   * 5. Returns day statistics for frontend visualization
+   * 
+   * @param dayNumber The day to process (1, 2, 3, ...)
+   * @return Day results including collapse detection
+   */
+  public CollapseVisualDayResultSchema executeCollapseVisualDay(int dayNumber) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    // Validate initialization
+    if (!collapseVisualInitialized || collapseVisualSimStart == null) {
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Simulation not initialized. Call initCollapseVisualSimulation first.")
+          .hasReachedCollapse(false)
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+    
+    // Check max days
+    if (dayNumber > MAX_SIMULATION_DAYS) {
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message("Maximum simulation days reached (" + MAX_SIMULATION_DAYS + ")")
+          .dayNumber(dayNumber)
+          .hasReachedCollapse(false)
+          .collapseReason("MAX_DAYS_REACHED")
+          .continueSimulation(false)
+          .statusLabel("COMPLETED")
+          .build();
+    }
+    
+    try {
+      LocalDateTime dayStart = collapseVisualSimStart.plusDays(dayNumber - 1);
+      LocalDateTime dayEnd = dayStart.plusDays(1);
+      
+      System.out.println("\n--- COLLAPSE VISUAL: Day " + dayNumber + " (" + dayStart.toLocalDate() + ") ---");
+      
+      // STEP 1: Load orders for this day
+      com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
+          dataLoadService.loadOrdersFromFiles(
+              com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
+              dayStart,
+              dayEnd,
+              false  // Check for duplicates
+          );
+      
+      int newOrdersToday = loadResult.ordersCreated;
+      collapseVisualTotalOrdersLoaded += newOrdersToday;
+      
+      System.out.println("  New orders loaded: " + newOrdersToday);
+      System.out.println("  Total orders in system: " + collapseVisualTotalOrdersLoaded);
+      
+      // STEP 2: Execute ALNS on ALL orders (from simulation start to horizon)
+      LocalDateTime algoStart = collapseVisualSimStart;
+      LocalDateTime algoEnd = dayStart.plusDays(Constants.HORIZON_DAYS);
+      
+      // FORCE DATABASE MODE: This ensures we only load unassigned orders from the DB
+      // instead of re-loading everything from files. This prevents deadlocks and re-assignment of completed orders.
+      DataSourceOverride.setOverride(Constants.DataSourceMode.DATABASE);
+      Solution alnsSolution;
+      try {
+          alnsSolution = new Solution(algoStart, algoEnd);
+          alnsSolution.solve();
+      } finally {
+          DataSourceOverride.clearOverride();
+      }
+      
+      // STEP 3: Count results from order splits
+      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      int dayAssigned = 0;
+      int dayUnassigned = 0;
+      int dayTotal = 0;
+      
+      // DEBUG: Log orderSplits info
+      System.out.println("  [DEBUG] orderSplits null? " + (orderSplits == null));
+      System.out.println("  [DEBUG] orderSplits size: " + (orderSplits != null ? orderSplits.size() : 0));
+      
+      // Collect unique flight instances used in solution
+      Map<String, CollapseVisualDayResultSchema.FlightInstanceDTO> usedFlightInstances = new HashMap<>();
+      
+      int totalSplits = 0;
+      int splitsWithInstances = 0;
+      int totalInstancesProcessed = 0;
+      
+      if (orderSplits != null && !orderSplits.isEmpty()) {
+        // DEBUG: Show first few orders in splits
+        int debugCount = 0;
+        for (Map.Entry<String, List<Solution.OrderSplitInfo>> entry : orderSplits.entrySet()) {
+          if (debugCount < 3) {
+            System.out.println("  [DEBUG] Order " + entry.getKey() + " has " + entry.getValue().size() + " splits");
+            for (Solution.OrderSplitInfo split : entry.getValue()) {
+              System.out.println("    qty=" + split.quantity + 
+                  ", hasRoute=" + (split.assignedRoute != null && !split.assignedRoute.isEmpty()) +
+                  ", instanceCount=" + (split.assignedFlightInstances != null ? split.assignedFlightInstances.size() : 0));
+            }
+            debugCount++;
+          }
+        }
+        
+        for (List<Solution.OrderSplitInfo> splits : orderSplits.values()) {
+          for (Solution.OrderSplitInfo split : splits) {
+            totalSplits++;
+            dayTotal += split.quantity;
+            
+            if (split.assignedRoute != null) {
+              dayAssigned += split.quantity;
+              
+              // Collect flight instances used in this split
+              if (split.assignedFlightInstances != null && !split.assignedFlightInstances.isEmpty()) {
+                splitsWithInstances++;
+                for (FlightInstanceSchema instance : split.assignedFlightInstances) {
+                  totalInstancesProcessed++;
+                  if (instance != null && instance.getInstanceId() != null) {
+                    String instId = instance.getInstanceId();
+                    if (usedFlightInstances.containsKey(instId)) {
+                      // Increment product count
+                      var existing = usedFlightInstances.get(instId);
+                      existing.setProductCount(existing.getProductCount() + split.quantity);
+                    } else {
+                      // Create new entry
+                      var baseFlight = instance.getBaseFlight();
+                      var originAirport = baseFlight != null ? baseFlight.getOriginAirportSchema() : null;
+                      var destAirport = baseFlight != null ? baseFlight.getDestinationAirportSchema() : null;
+                      
+                      usedFlightInstances.put(instId, CollapseVisualDayResultSchema.FlightInstanceDTO.builder()
+                          .instanceId(instId)
+                          .flightId(instance.getBaseFlightId())
+                          .flightCode(baseFlight != null ? baseFlight.getCode() : null)
+                          .departureTime(instance.getDepartureDateTime())
+                          .arrivalTime(instance.getArrivalDateTime())
+                          .originCode(originAirport != null ? originAirport.getCodeIATA() : null)
+                          .destinationCode(destAirport != null ? destAirport.getCodeIATA() : null)
+                          .originLat(parseLatLng(originAirport != null ? originAirport.getLatitude() : null))
+                          .originLng(parseLatLng(originAirport != null ? originAirport.getLongitude() : null))
+                          .destLat(parseLatLng(destAirport != null ? destAirport.getLatitude() : null))
+                          .destLng(parseLatLng(destAirport != null ? destAirport.getLongitude() : null))
+                          .productCount(split.quantity)
+                          .build());
+                    }
+                  }
+                }
+              }
+            } else {
+              dayUnassigned += split.quantity;
+            }
+          }
+        }
+        
+        // Log flight instances collected
+        System.out.println("  Order splits stats: total=" + totalSplits + 
+            ", withInstances=" + splitsWithInstances + 
+            ", instancesProcessed=" + totalInstancesProcessed);
+        System.out.println("  Unique flight instances collected: " + usedFlightInstances.size());
+        if (!usedFlightInstances.isEmpty()) {
+          var firstInst = usedFlightInstances.values().iterator().next();
+          System.out.println("  Sample instance: " + firstInst.getInstanceId() + 
+              " from " + firstInst.getOriginCode() + " to " + firstInst.getDestinationCode() +
+              " lat/lng: " + firstInst.getOriginLat() + "/" + firstInst.getOriginLng());
+        }
+        
+        // STEP 4: Persist to DB so flights show used capacity
+        try {
+          List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits =
+              convertToOrderSplitsWithInstances(orderSplits);
+          
+          if (!persistenceSplits.isEmpty()) {
+            int persisted = persistenceService.persistSolutionWithInstances(persistenceSplits);
+            System.out.println("  Persisted " + persisted + " products to DB");
+          }
+        } catch (Exception e) {
+          System.out.println("  WARNING: Persistence failed: " + e.getMessage());
+        }
+        
+        // STEP 4.5: Update product states based on end of day time
+        // This marks products as IN_TRANSIT or ARRIVED so they won't be re-processed
+        // Uses retry logic to handle potential deadlocks
+        boolean stateUpdateSuccess = false;
+        for (int attempt = 1; attempt <= 3 && !stateUpdateSuccess; attempt++) {
+          try {
+            var stateUpdateStats = simulationTimeService.updateProductStates(dayEnd);
+            System.out.println("  State updates: PENDING->IN_TRANSIT=" + stateUpdateStats.getPendingToInTransit() +
+                             ", IN_TRANSIT->ARRIVED=" + stateUpdateStats.getInTransitToArrived() +
+                             ", ARRIVED->DELIVERED=" + stateUpdateStats.getArrivedToDelivered());
+            stateUpdateSuccess = true;
+          } catch (Exception e) {
+            if (attempt < 3) {
+              System.out.println("  State update attempt " + attempt + " failed (deadlock?), retrying...");
+              try { Thread.sleep(200L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            } else {
+              System.out.println("  WARNING: State update failed after 3 attempts: " + e.getMessage());
+            }
+          }
+        }
+      }
+      
+      // STEP 5: Calculate metrics
+      double assignmentRate = dayTotal > 0 ? (dayAssigned * 100.0 / dayTotal) : 100.0;
+      double unassignedRate = dayTotal > 0 ? (dayUnassigned * 100.0 / dayTotal) : 0.0;
+      
+      System.out.println("  Products total: " + dayTotal);
+      System.out.println("  Assigned: " + dayAssigned);
+      System.out.println("  Unassigned (backlog): " + dayUnassigned);
+      System.out.println("  Assignment rate: " + String.format("%.1f", assignmentRate) + "%");
+      
+      // STEP 6: Check backlog trend
+      boolean backlogGrowing = dayUnassigned > collapseVisualPreviousBacklog && collapseVisualPreviousBacklog > 0;
+      if (backlogGrowing) {
+        collapseVisualConsecutiveGrowingDays++;
+        System.out.println("  WARNING: Backlog growing (" + collapseVisualPreviousBacklog + " -> " + dayUnassigned + ")");
+      } else if (dayUnassigned < collapseVisualPreviousBacklog) {
+        collapseVisualConsecutiveGrowingDays = 0; // Reset
+      }
+      
+      int previousBacklog = collapseVisualPreviousBacklog;
+      collapseVisualPreviousBacklog = dayUnassigned;
+      
+      // STEP 6.5: Check REAL SLA violations (products that exceed time limits)
+      // Continental: orders with origin and destination in SAME continent must be delivered within 48h
+      // Intercontinental: orders with origin and destination in DIFFERENT continents must be delivered within 72h
+      LocalDateTime continentalDeadline = dayEnd.minusHours(48);  // Orders older than this violate continental SLA
+      LocalDateTime intercontinentalDeadline = dayEnd.minusHours(72);  // Orders older than this violate intercontinental SLA
+      
+      int slaViolationsContinental = 0;
+      int slaViolationsIntercontinental = 0;
+      
+      try {
+        var violations = productRepository.countSLAViolationsByType(continentalDeadline, intercontinentalDeadline);
+        for (Object[] row : violations) {
+          String type = (String) row[0];
+          long count = (Long) row[1];
+          if ("CONTINENTAL".equals(type)) {
+            slaViolationsContinental = (int) count;
+          } else if ("INTERCONTINENTAL".equals(type)) {
+            slaViolationsIntercontinental = (int) count;
+          }
+        }
+        
+        int totalSLAViolations = slaViolationsContinental + slaViolationsIntercontinental;
+        if (totalSLAViolations > 0) {
+          System.out.println("  ⚠️ SLA VIOLATIONS DETECTED:");
+          if (slaViolationsContinental > 0) {
+            System.out.println("    - Continental (>48h): " + slaViolationsContinental + " products");
+          }
+          if (slaViolationsIntercontinental > 0) {
+            System.out.println("    - Intercontinental (>72h): " + slaViolationsIntercontinental + " products");
+          }
+        }
+      } catch (Exception e) {
+        System.out.println("  WARNING: Could not check SLA violations: " + e.getMessage());
+      }
+      
+      // STEP 7: Check collapse conditions
+      boolean hasCollapsed = false;
+      String collapseReason = null;
+      
+      // Condition 0: ANY SLA violation = immediate collapse (strictest condition)
+      if (slaViolationsContinental > 0 || slaViolationsIntercontinental > 0) {
+        hasCollapsed = true;
+        int totalViolations = slaViolationsContinental + slaViolationsIntercontinental;
+        if (slaViolationsContinental > 0 && slaViolationsIntercontinental > 0) {
+          collapseReason = String.format("SLA_VIOLATION: %d continental (>48h) + %d intercontinental (>72h) products exceeded delivery time", 
+            slaViolationsContinental, slaViolationsIntercontinental);
+        } else if (slaViolationsContinental > 0) {
+          collapseReason = String.format("SLA_VIOLATION: %d continental products exceeded 48h delivery limit", slaViolationsContinental);
+        } else {
+          collapseReason = String.format("SLA_VIOLATION: %d intercontinental products exceeded 72h delivery limit", slaViolationsIntercontinental);
+        }
+        System.out.println("\n!!! COLLAPSE: " + collapseReason + " !!!");
+      }
+      
+      // Condition 1: Unassigned percentage exceeds threshold (only if no SLA violation yet)
+      if (!hasCollapsed && unassignedRate > COLLAPSE_THRESHOLD_PERCENT) {
+        hasCollapsed = true;
+        collapseReason = "BACKLOG_OVERFLOW: " + String.format("%.1f", unassignedRate) + "% of products unassigned (threshold: " + COLLAPSE_THRESHOLD_PERCENT + "%)";
+        System.out.println("\n!!! COLLAPSE: " + collapseReason + " !!!");
+      }
+      
+      // Condition 2: Backlog growing continuously
+      if (!hasCollapsed && collapseVisualConsecutiveGrowingDays >= MAX_GROWING_BACKLOG_DAYS) {
+        hasCollapsed = true;
+        collapseReason = "CAPACITY_EXHAUSTED: Backlog grew for " + MAX_GROWING_BACKLOG_DAYS + " consecutive days";
+        System.out.println("\n!!! COLLAPSE: " + collapseReason + " !!!");
+      }
+      
+      // Calculate collapse progress (0-100)
+      double collapseProgress = Math.min(100.0, Math.max(
+          unassignedRate / COLLAPSE_THRESHOLD_PERCENT * 100.0,
+          collapseVisualConsecutiveGrowingDays / (double) MAX_GROWING_BACKLOG_DAYS * 100.0
+      ));
+      
+      // If collapsed (e.g. due to SLA violations), force progress to 100%
+      if (hasCollapsed) {
+        collapseProgress = 100.0;
+      }
+      
+      // Status label
+      String statusLabel;
+      if (hasCollapsed) {
+        statusLabel = "COLLAPSED";
+      } else if (collapseProgress > 70) {
+        statusLabel = "CRITICAL";
+      } else if (collapseProgress > 40) {
+        statusLabel = "WARNING";
+      } else {
+        statusLabel = "HEALTHY";
+      }
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      // Convert flight instances map to list
+      List<CollapseVisualDayResultSchema.FlightInstanceDTO> flightInstanceList = 
+          new ArrayList<>(usedFlightInstances.values());
+      System.out.println("  Flight instances used: " + flightInstanceList.size());
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message(hasCollapsed ? "System collapsed on day " + dayNumber : "Day " + dayNumber + " completed")
+          .dayNumber(dayNumber)
+          .dayStart(dayStart)
+          .dayEnd(dayEnd)
+          .hasReachedCollapse(hasCollapsed)
+          .collapseReason(collapseReason)
+          .continueSimulation(!hasCollapsed && dayNumber < MAX_SIMULATION_DAYS)
+          .ordersLoadedToday(newOrdersToday)
+          .productsAssignedToday(dayAssigned)
+          .productsUnassignedToday(dayUnassigned)
+          .assignmentRateToday(assignmentRate)
+          .totalDaysSimulated(dayNumber)
+          .totalOrdersLoaded(collapseVisualTotalOrdersLoaded)
+          .totalProductsInSystem(dayTotal)
+          .cumulativeAssigned(dayAssigned)
+          .cumulativeBacklog(dayUnassigned)
+          .cumulativeAssignmentRate(assignmentRate)
+          .productsOnTimeToday(dayAssigned)
+          .productsLateToday(dayUnassigned)
+          .slaComplianceToday(assignmentRate)
+          .previousDayBacklog(previousBacklog)
+          .consecutiveGrowingDays(collapseVisualConsecutiveGrowingDays)
+          .backlogIsGrowing(backlogGrowing)
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          .collapseProgress(collapseProgress)
+          .statusLabel(statusLabel)
+          .assignedFlightInstances(flightInstanceList)
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! Day " + dayNumber + " failed: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Day " + dayNumber + " failed: " + e.getMessage())
+          .dayNumber(dayNumber)
+          .hasReachedCollapse(true)
+          .collapseReason("ERROR")
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Reset the visual collapse simulation state
+   * Can be called to start over without restarting the server
+   */
+  public void resetCollapseVisualSimulation() {
+    collapseVisualInitialized = false;
+    collapseVisualSimStart = null;
+    collapseVisualTotalOrdersLoaded = 0;
+    collapseVisualPreviousBacklog = 0;
+    collapseVisualConsecutiveGrowingDays = 0;
+    System.out.println("Collapse visual simulation state reset");
+  }
 }
+

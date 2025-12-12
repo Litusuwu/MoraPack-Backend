@@ -55,4 +55,48 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
   @Modifying
   @Query(value = "DELETE FROM products", nativeQuery = true)
   void deleteAllNative();
+
+  // SLA Violation Check: Find products that have exceeded their SLA deadline
+  // Continental (same continent): 48 hours max
+  // Intercontinental (different continent): 72 hours max
+  @Query("""
+    SELECT p FROM Product p 
+    JOIN FETCH p.order o 
+    JOIN FETCH o.origin oc 
+    JOIN FETCH o.destination dc 
+    WHERE p.status = 'PENDING' 
+    AND (
+      (oc.continent = dc.continent AND o.creationDate < :continentalDeadline)
+      OR 
+      (oc.continent <> dc.continent AND o.creationDate < :intercontinentalDeadline)
+    )
+    """)
+  List<Product> findSLAViolations(
+    @Param("continentalDeadline") java.time.LocalDateTime continentalDeadline,
+    @Param("intercontinentalDeadline") java.time.LocalDateTime intercontinentalDeadline
+  );
+
+  // Count SLA violations by type - only count products that were NOT assigned to any flight
+  // Products with assignedFlight = null or empty are truly unassigned and violating SLA
+  @Query("""
+    SELECT 
+      CASE WHEN oc.continent = dc.continent THEN 'CONTINENTAL' ELSE 'INTERCONTINENTAL' END as type,
+      COUNT(p)
+    FROM Product p 
+    JOIN p.order o 
+    JOIN o.origin oc 
+    JOIN o.destination dc 
+    WHERE p.status = 'PENDING' 
+    AND (p.assignedFlight IS NULL OR p.assignedFlight = '')
+    AND (
+      (oc.continent = dc.continent AND o.creationDate < :continentalDeadline)
+      OR 
+      (oc.continent <> dc.continent AND o.creationDate < :intercontinentalDeadline)
+    )
+    GROUP BY CASE WHEN oc.continent = dc.continent THEN 'CONTINENTAL' ELSE 'INTERCONTINENTAL' END
+    """)
+  List<Object[]> countSLAViolationsByType(
+    @Param("continentalDeadline") java.time.LocalDateTime continentalDeadline,
+    @Param("intercontinentalDeadline") java.time.LocalDateTime intercontinentalDeadline
+  );
 }

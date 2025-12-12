@@ -4,6 +4,7 @@ import com.system.morapack.bll.controller.AlgorithmController;
 import com.system.morapack.schemas.AlgorithmRequest;
 import com.system.morapack.schemas.AlgorithmResultSchema;
 import com.system.morapack.schemas.CollapseResultSchema;
+import com.system.morapack.schemas.CollapseVisualDayResultSchema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -219,6 +220,9 @@ public class AlgorithmAPI {
    * - Expected execution time: 1-4 hours
    * 
    * Returns collapse point and statistics when system reaches saturation
+   * 
+   * NOTE: This is the BATCH collapse - runs to completion in one call.
+   * Use /collapse-visual/* endpoints for interactive day-by-day simulation.
    */
   @PostMapping("/collapse")
   public ResponseEntity<CollapseResultSchema> executeCollapse(
@@ -235,5 +239,95 @@ public class AlgorithmAPI {
     } else {
       return ResponseEntity.internalServerError().body(result);
     }
+  }
+
+  // ==================== VISUAL COLLAPSE SIMULATION (Day-by-Day) ====================
+
+  /**
+   * Initialize visual collapse simulation
+   * POST /api/algorithm/collapse-visual/init
+   * 
+   * Must be called ONCE before starting day-by-day execution.
+   * Clears the database and prepares for simulation.
+   * 
+   * Request body example:
+   * {
+   *   "simulationStartTime": "2025-01-02T00:00:00"
+   * }
+   * 
+   * Default start: January 2, 2025 (where data files begin)
+   */
+  @PostMapping("/collapse-visual/init")
+  public ResponseEntity<CollapseVisualDayResultSchema> initCollapseVisual(
+      @RequestBody(required = false) AlgorithmRequest request) {
+    
+    java.time.LocalDateTime startTime;
+    
+    if (request != null && request.getSimulationStartTime() != null) {
+      startTime = request.getSimulationStartTime();
+    } else {
+      // Default: January 2, 2025 00:00:00 (where data begins)
+      startTime = java.time.LocalDateTime.of(2025, 1, 2, 0, 0, 0);
+    }
+    
+    CollapseVisualDayResultSchema result = algorithmController.initCollapseVisualSimulation(startTime);
+    
+    if (result.getSuccess()) {
+      return ResponseEntity.ok(result);
+    } else {
+      return ResponseEntity.internalServerError().body(result);
+    }
+  }
+
+  /**
+   * Execute ONE day of visual collapse simulation
+   * POST /api/algorithm/collapse-visual/day/{dayNumber}
+   * 
+   * Call this repeatedly for each day (1, 2, 3, ...) until:
+   * - hasReachedCollapse = true (system collapsed)
+   * - continueSimulation = false (max days reached or error)
+   * 
+   * Frontend should animate flights between calls, then call next day.
+   * 
+   * Returns real-time statistics for visualization:
+   * - Products assigned/unassigned today
+   * - Backlog size and trend
+   * - Collapse progress (0-100%)
+   * - Status label (HEALTHY, WARNING, CRITICAL, COLLAPSED)
+   */
+  @PostMapping("/collapse-visual/day/{dayNumber}")
+  public ResponseEntity<CollapseVisualDayResultSchema> executeCollapseVisualDay(
+      @PathVariable int dayNumber) {
+    
+    if (dayNumber < 1) {
+      return ResponseEntity.badRequest().body(
+          CollapseVisualDayResultSchema.builder()
+              .success(false)
+              .message("Day number must be >= 1")
+              .continueSimulation(false)
+              .build()
+      );
+    }
+    
+    CollapseVisualDayResultSchema result = algorithmController.executeCollapseVisualDay(dayNumber);
+    
+    if (result.getSuccess()) {
+      return ResponseEntity.ok(result);
+    } else {
+      return ResponseEntity.internalServerError().body(result);
+    }
+  }
+
+  /**
+   * Reset visual collapse simulation state
+   * POST /api/algorithm/collapse-visual/reset
+   * 
+   * Resets server-side state. Call before starting a new simulation
+   * or if you want to abort the current one.
+   */
+  @PostMapping("/collapse-visual/reset")
+  public ResponseEntity<Void> resetCollapseVisual() {
+    algorithmController.resetCollapseVisualSimulation();
+    return ResponseEntity.ok().build();
   }
 }

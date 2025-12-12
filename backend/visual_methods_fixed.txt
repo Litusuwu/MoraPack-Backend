@@ -1,0 +1,283 @@
+  // ==================== COLLAPSE VISUAL METHODS ====================
+
+  /**
+   * Initialize the visual collapse simulation
+   * Must be called ONCE before the first call to executeCollapseVisualDay()
+   * Clears database and resets all state
+   * 
+   * @param simulationStartTime The start time for simulation (default: 2025-01-02T00:00:00)
+   * @return Success status
+   */
+  public CollapseVisualDayResultSchema initCollapseVisualSimulation(LocalDateTime simulationStartTime) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    try {
+      System.out.println("===========================================");
+      System.out.println("INITIALIZING COLLAPSE VISUAL SIMULATION");
+      System.out.println("Start time: " + simulationStartTime);
+      System.out.println("===========================================");
+      
+      // Clear existing data
+      dataLoadService.clearAllOrders();
+      System.out.println("Database cleared successfully");
+      
+      // Reset state
+      collapseVisualSimStart = simulationStartTime;
+      collapseVisualTotalOrdersLoaded = 0;
+      collapseVisualPreviousBacklog = 0;
+      collapseVisualConsecutiveGrowingDays = 0;
+      collapseVisualInitialized = true;
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message("Simulation initialized successfully")
+          .dayNumber(0)
+          .hasReachedCollapse(false)
+          .continueSimulation(true)
+          .totalOrdersLoaded(0)
+          .cumulativeBacklog(0)
+          .statusLabel("INITIALIZED")
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! Initialization failed: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Initialization failed: " + e.getMessage())
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Execute ONE day of visual collapse simulation
+   * 
+   * This method:
+   * 1. Loads orders for the current day from file
+   * 2. Runs ALNS algorithm on ALL orders (including backlog)
+   * 3. Persists assignments to DB
+   * 4. Calculates collapse metrics
+   * 5. Returns immediately for frontend to animate
+   * 
+   * @param dayNumber The day to process (1, 2, 3...)
+   * @return Result with metrics and collapse status
+   */
+  public CollapseVisualDayResultSchema executeCollapseVisualDay(int dayNumber) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    if (!collapseVisualInitialized || collapseVisualSimStart == null) {
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Simulation not initialized. Call initCollapseVisualSimulation first.")
+          .continueSimulation(false)
+          .statusLabel("NOT_INITIALIZED")
+          .build();
+    }
+    
+    try {
+      LocalDateTime dayStart = collapseVisualSimStart.plusDays(dayNumber - 1);
+      LocalDateTime dayEnd = dayStart.plusDays(1);
+      
+      System.out.println("\n--- Day " + dayNumber + ": " + dayStart.toLocalDate() + " ---");
+      
+      // Load orders for this day (they ADD to existing orders in DB)
+      com.system.morapack.bll.service.DataLoadService.LoadOrdersResult loadResult =
+          dataLoadService.loadOrdersFromFiles(
+              com.system.morapack.config.Constants.ORDER_FILES_DIRECTORY,
+              dayStart,
+              dayEnd,
+              false  // Check for duplicates
+          );
+      
+      int newOrdersToday = loadResult.ordersCreated;
+      collapseVisualTotalOrdersLoaded += newOrdersToday;
+      
+      System.out.println("  New orders loaded today: " + newOrdersToday);
+      System.out.println("  Total orders in system: " + collapseVisualTotalOrdersLoaded);
+      
+      // Execute ALNS algorithm on ALL orders (from simulation start to horizon)
+      LocalDateTime algoStart = collapseVisualSimStart;
+      LocalDateTime algoEnd = dayStart.plusDays(Constants.HORIZON_DAYS);
+      
+      System.out.println("  Executing ALNS on ALL orders from " + algoStart.toLocalDate() + " to " + algoEnd.toLocalDate());
+      
+      Solution alnsSolution = new Solution(algoStart, algoEnd);
+      alnsSolution.solve();
+      
+      // Count results from order splits
+      Map<String, List<Solution.OrderSplitInfo>> orderSplits = alnsSolution.getOrderSplits();
+      int dayAssigned = 0;
+      int dayUnassigned = 0;
+      int dayTotal = 0;
+      int dayLocalDelivery = 0;
+      
+      System.out.println("  OrderSplits returned: " + (orderSplits != null ? orderSplits.size() : "null") + " orders");
+      
+      if (orderSplits != null && !orderSplits.isEmpty()) {
+        for (List<Solution.OrderSplitInfo> splits : orderSplits.values()) {
+          for (Solution.OrderSplitInfo split : splits) {
+            dayTotal += split.quantity;
+            
+            if (split.assignedRoute != null) {
+              if (split.assignedRoute.isEmpty()) {
+                dayAssigned += split.quantity;
+                dayLocalDelivery += split.quantity;
+              } else {
+                dayAssigned += split.quantity;
+              }
+            } else {
+              dayUnassigned += split.quantity;
+            }
+          }
+        }
+        
+        // Persist assigned products to DB so next day sees filled capacities
+        try {
+          List<AlgorithmPersistenceService.OrderSplitWithInstances> persistenceSplits =
+              convertToOrderSplitsWithInstances(orderSplits);
+          
+          if (!persistenceSplits.isEmpty()) {
+            int persisted = persistenceService.persistSolutionWithInstances(persistenceSplits);
+            System.out.println("  Persisted " + persisted + " products to DB");
+          }
+        } catch (Exception e) {
+          System.out.println("  WARNING: Failed to persist day " + dayNumber + " results: " + e.getMessage());
+        }
+      }
+      
+      // Calculate rates
+      double assignmentRate = dayTotal > 0 ? (dayAssigned * 100.0 / dayTotal) : 100.0;
+      double unassignedRate = dayTotal > 0 ? (dayUnassigned * 100.0 / dayTotal) : 0.0;
+      
+      System.out.println("  Total products in system: " + dayTotal);
+      System.out.println("  Assigned: " + dayAssigned + (dayLocalDelivery > 0 ? " (" + dayLocalDelivery + " local)" : ""));
+      System.out.println("  Unassigned (backlog): " + dayUnassigned);
+      System.out.println("  Assignment rate: " + String.format("%.1f", assignmentRate) + "%");
+      
+      // Track backlog growth
+      boolean backlogGrowing = dayUnassigned > collapseVisualPreviousBacklog;
+      if (backlogGrowing) {
+        collapseVisualConsecutiveGrowingDays++;
+      } else {
+        collapseVisualConsecutiveGrowingDays = 0;
+      }
+      
+      int previousBacklog = collapseVisualPreviousBacklog;
+      collapseVisualPreviousBacklog = dayUnassigned;
+      
+      // Check collapse conditions
+      boolean hasCollapsed = false;
+      String collapseReason = null;
+      
+      if (unassignedRate > COLLAPSE_THRESHOLD_PERCENT_VISUAL) {
+        hasCollapsed = true;
+        collapseReason = String.format("Unassigned rate %.1f%% exceeded threshold %.1f%%",
+            unassignedRate, COLLAPSE_THRESHOLD_PERCENT_VISUAL);
+        System.out.println("  !!! COLLAPSE: " + collapseReason);
+      } else if (collapseVisualConsecutiveGrowingDays >= MAX_GROWING_BACKLOG_DAYS_VISUAL) {
+        hasCollapsed = true;
+        collapseReason = String.format("Backlog grew for %d consecutive days",
+            collapseVisualConsecutiveGrowingDays);
+        System.out.println("  !!! COLLAPSE: " + collapseReason);
+      }
+      
+      // Determine status label and collapse progress
+      String statusLabel;
+      double collapseProgress;
+      
+      if (hasCollapsed) {
+        statusLabel = "COLLAPSED";
+        collapseProgress = 100.0;
+      } else if (unassignedRate > 7.0 || collapseVisualConsecutiveGrowingDays >= 3) {
+        statusLabel = "CRITICAL";
+        collapseProgress = 80.0;
+      } else if (unassignedRate > 4.0 || collapseVisualConsecutiveGrowingDays >= 2) {
+        statusLabel = "WARNING";
+        collapseProgress = 50.0;
+      } else if (unassignedRate > 1.0 || backlogGrowing) {
+        statusLabel = "CAUTION";
+        collapseProgress = 25.0;
+      } else {
+        statusLabel = "HEALTHY";
+        collapseProgress = 0.0;
+      }
+      
+      boolean continueSimulation = !hasCollapsed && dayNumber < MAX_SIMULATION_DAYS_VISUAL;
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message(hasCollapsed ? "COLLAPSE: " + collapseReason : "Day " + dayNumber + " processed")
+          .dayNumber(dayNumber)
+          .dayStart(dayStart)
+          .dayEnd(dayEnd)
+          .hasReachedCollapse(hasCollapsed)
+          .collapseReason(collapseReason)
+          .continueSimulation(continueSimulation)
+          // Today's stats
+          .ordersLoadedToday(newOrdersToday)
+          .productsAssignedToday(dayAssigned)
+          .productsUnassignedToday(dayUnassigned)
+          .assignmentRateToday(assignmentRate)
+          // Cumulative stats
+          .totalDaysSimulated(dayNumber)
+          .totalOrdersLoaded(collapseVisualTotalOrdersLoaded)
+          .totalProductsInSystem(dayTotal)
+          .cumulativeAssigned(dayAssigned)
+          .cumulativeBacklog(dayUnassigned)
+          .cumulativeAssignmentRate(assignmentRate)
+          // SLA metrics
+          .productsOnTimeToday(dayAssigned)
+          .productsLateToday(dayUnassigned)
+          .slaComplianceToday(assignmentRate)
+          // Backlog trend
+          .previousDayBacklog(previousBacklog)
+          .consecutiveGrowingDays(collapseVisualConsecutiveGrowingDays)
+          .backlogIsGrowing(backlogGrowing)
+          // Execution
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          // Progress
+          .collapseProgress(collapseProgress)
+          .statusLabel(statusLabel)
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! Day " + dayNumber + " failed: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Day " + dayNumber + " failed: " + e.getMessage())
+          .dayNumber(dayNumber)
+          .hasReachedCollapse(true)
+          .collapseReason("ERROR")
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Reset the visual collapse simulation state
+   * Can be called to start over without restarting the server
+   */
+  public void resetCollapseVisualSimulation() {
+    collapseVisualInitialized = false;
+    collapseVisualSimStart = null;
+    collapseVisualTotalOrdersLoaded = 0;
+    collapseVisualPreviousBacklog = 0;
+    collapseVisualConsecutiveGrowingDays = 0;
+    System.out.println("Collapse visual simulation state reset");
+  }
+}
