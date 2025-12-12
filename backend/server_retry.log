@@ -1,0 +1,1448 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.system:MoraPack >-------------------------
+[INFO] Building MoraPack 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.5.5:run (default-cli) > test-compile @ MoraPack >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ MoraPack ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ MoraPack ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ MoraPack ---
+[INFO] skip non existing resourceDirectory /home/krowslyare/new/MoraPack/backend/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.14.0:testCompile (default-testCompile) @ MoraPack ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.5.5:run (default-cli) < test-compile @ MoraPack <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.5.5:run (default-cli) @ MoraPack ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.5)
+
+2025-12-11T02:44:16.275-05:00  INFO 24954 --- [MoraPack] [  restartedMain] c.system.morapack.MoraPackApplication    : Starting MoraPackApplication using Java 21.0.8 with PID 24954 (/home/krowslyare/new/MoraPack/backend/target/classes started by krowslyare in /home/krowslyare/new/MoraPack/backend)
+2025-12-11T02:44:16.277-05:00  INFO 24954 --- [MoraPack] [  restartedMain] c.system.morapack.MoraPackApplication    : No active profile set, falling back to 1 default profile: "default"
+2025-12-11T02:44:16.322-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2025-12-11T02:44:16.323-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2025-12-11T02:44:16.343-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .s.b.d.c.l.DockerComposeLifecycleManager : Using Docker Compose file /home/krowslyare/new/MoraPack/backend/compose.yaml
+2025-12-11T02:44:16.914-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .s.b.d.c.l.DockerComposeLifecycleManager : There are already Docker Compose services running, skipping startup
+2025-12-11T02:44:18.045-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-12-11T02:44:18.139-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'productRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ProductRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ProductRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.141-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'orderRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.OrderRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.OrderRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.144-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'airportRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AirportRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AirportRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.145-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'routeRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.RouteRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.RouteRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.146-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'productFlightRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ProductFlightRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ProductFlightRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.149-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'trackingEventRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.TrackingEventRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.TrackingEventRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.151-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'algorithmParameterRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AlgorithmParameterRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AlgorithmParameterRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.151-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'flightSegmentRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.FlightSegmentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.FlightSegmentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.152-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'travelPlanRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.TravelPlanRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.TravelPlanRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.153-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'flightRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.FlightRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.FlightRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.155-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'warehouseRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.WarehouseRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.WarehouseRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.157-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'scenarioParametersRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ScenarioParametersRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.ScenarioParametersRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.157-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'alertRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AlertRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AlertRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.158-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'userRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.UserRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.UserRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.158-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'accountRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AccountRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AccountRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.159-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'performanceMetricRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.PerformanceMetricRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.PerformanceMetricRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.160-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'solutionRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.SolutionRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.SolutionRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.161-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'airplaneRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AirplaneRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.AirplaneRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.162-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'customerRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.CustomerRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.CustomerRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.163-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.f.s.DefaultListableBeanFactory     : Overriding bean definition for bean 'cityRepository' with a different definition: replacing [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.CityRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration] with [Root bean: class=org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean; scope=; abstract=false; lazyInit=false; autowireMode=0; dependencyCheck=0; autowireCandidate=true; primary=false; fallback=false; factoryBeanName=null; factoryMethodName=null; initMethodNames=null; destroyMethodNames=null; defined in com.system.morapack.dao.morapack_psql.repository.CityRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration]
+2025-12-11T02:44:18.164-05:00  INFO 24954 --- [MoraPack] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 107 ms. Found 40 JPA repository interfaces.
+2025-12-11T02:44:18.814-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2025-12-11T02:44:18.829-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-12-11T02:44:18.829-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.44]
+2025-12-11T02:44:18.873-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-12-11T02:44:18.874-05:00  INFO 24954 --- [MoraPack] [  restartedMain] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1952 ms
+2025-12-11T02:44:19.065-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-12-11T02:44:19.133-05:00  INFO 24954 --- [MoraPack] [  restartedMain] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.6.26.Final
+2025-12-11T02:44:19.170-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2025-12-11T02:44:19.456-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2025-12-11T02:44:19.486-05:00  INFO 24954 --- [MoraPack] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2025-12-11T02:44:19.592-05:00  INFO 24954 --- [MoraPack] [  restartedMain] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@363496cc
+2025-12-11T02:44:19.593-05:00  INFO 24954 --- [MoraPack] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2025-12-11T02:44:19.664-05:00  INFO 24954 --- [MoraPack] [  restartedMain] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
+	Database driver: undefined/unknown
+	Database version: 13.11
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2025-12-11T02:44:20.878-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2025-12-11T02:44:22.134-05:00  INFO 24954 --- [MoraPack] [  restartedMain] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-12-11T02:44:22.453-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+===========================================
+INITIALIZING DATA SOURCE FACTORY
+===========================================
+[DataSourceContextInitializer] Spring context set successfully
+[DataSourceContextInitializer] DATA_SOURCE_MODE: DATABASE
+[DataSourceContextInitializer] Database mode available: true
+===========================================
+
+2025-12-11T02:44:25.152-05:00  WARN 24954 --- [MoraPack] [  restartedMain] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-12-11T02:44:25.524-05:00  WARN 24954 --- [MoraPack] [  restartedMain] .s.s.UserDetailsServiceAutoConfiguration : 
+
+Using generated security password: 2bbe4f33-97c1-4c6f-948a-5a52f9ffbcbd
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2025-12-11T02:44:25.535-05:00  INFO 24954 --- [MoraPack] [  restartedMain] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2025-12-11T02:44:25.673-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.v.b.OptionalValidatorFactoryBean     : Failed to set up a Bean Validation provider: jakarta.validation.NoProviderFoundException: Unable to create a Configuration, because no Jakarta Bean Validation provider could be found. Add a provider like Hibernate Validator (RI) to your classpath.
+2025-12-11T02:44:25.937-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.d.a.OptionalLiveReloadServer       : LiveReload server is running on port 35729
+2025-12-11T02:44:26.020-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2025-12-11T02:44:26.034-05:00  INFO 24954 --- [MoraPack] [  restartedMain] o.s.s.config.TaskSchedulerRouter         : No TaskScheduler/ScheduledExecutorService bean found for scheduled processing
+2025-12-11T02:44:26.040-05:00  INFO 24954 --- [MoraPack] [  restartedMain] c.system.morapack.MoraPackApplication    : Started MoraPackApplication in 10.209 seconds (process running for 10.701)
+2025-12-11T02:44:51.269-05:00  INFO 24954 --- [MoraPack] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-12-11T02:44:51.270-05:00  INFO 24954 --- [MoraPack] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-12-11T02:44:51.273-05:00  INFO 24954 --- [MoraPack] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 3 ms
+===========================================
+INITIALIZING COLLAPSE VISUAL SIMULATION
+Start time: 2025-01-02T00:00
+===========================================
+========================================
+CLEARING ALL ORDERS AND PRODUCTS
+========================================
+Products cleared (native DELETE)
+Orders cleared (native DELETE)
+Successfully cleared all orders and products
+========================================
+Database cleared successfully
+
+--- COLLAPSE VISUAL: Day 1 (2025-01-02) ---
+========================================
+LOADING ORDERS FROM FILES TO DATABASE
+Data directory: data/products
+Time window: 2025-01-02T00:00 to 2025-01-03T00:00
+========================================
+Initializing caches...
+Airport cache initialized: 30 airports
+Customer cache initialized: 32768 existing customers
+Found 30 order files
+Processing files ONE AT A TIME to avoid memory issues
+
+========================================
+PASS 1: SCANNING FOR UNIQUE CUSTOMERS
+========================================
+Scanning: _pedidos_LATI_.txt
+  Scanned 139337 lines
+Scanning: _pedidos_UMMS_.txt
+  Scanned 147061 lines
+Scanning: _pedidos_LOWW_.txt
+  Scanned 175749 lines
+Scanning: _pedidos_SCEL_.txt
+  Scanned 149288 lines
+Scanning: _pedidos_OSDI_.txt
+  Scanned 166116 lines
+Scanning: _pedidos_LBSF_.txt
+  Scanned 152898 lines
+Scanning: _pedidos_OERK_.txt
+  Scanned 162763 lines
+Scanning: _pedidos_EHAM_.txt
+  Scanned 142581 lines
+Scanning: _pedidos_OAKB_.txt
+  Scanned 152038 lines
+Scanning: _pedidos_OOMS_.txt
+  Scanned 108588 lines
+Scanning: _pedidos_SKBO_.txt
+  Scanned 156676 lines
+Scanning: _pedidos_SBBR_.txt
+  Scanned 143068 lines
+Scanning: _pedidos_SEQM_.txt
+  Scanned 169167 lines
+Scanning: _pedidos_SGAS_.txt
+  Scanned 162262 lines
+Scanning: _pedidos_VIDP_.txt
+  Scanned 94871 lines
+Scanning: _pedidos_OJAI_.txt
+  Scanned 109417 lines
+Scanning: _pedidos_LKPR_.txt
+  Scanned 133514 lines
+Scanning: _pedidos_SLLP_.txt
+  Scanned 101288 lines
+Scanning: _pedidos_OMDB_.txt
+  Scanned 153025 lines
+Scanning: _pedidos_SABE_.txt
+  Scanned 102708 lines
+Scanning: _pedidos_OYSN_.txt
+  Scanned 153745 lines
+Scanning: _pedidos_LDZA_.txt
+  Scanned 106401 lines
+Scanning: _pedidos_EKCH_.txt
+  Scanned 173128 lines
+Scanning: _pedidos_SUAA_.txt
+  Scanned 169586 lines
+Scanning: _pedidos_SPIM_.txt
+  Scanned 148271 lines
+Scanning: _pedidos_SVMI_.txt
+  Scanned 176118 lines
+Scanning: _pedidos_UBBB_.txt
+  Scanned 104334 lines
+Scanning: _pedidos_EDDI_.txt
+  Scanned 107092 lines
+Scanning: _pedidos_OPKC_.txt
+  Scanned 144817 lines
+Scanning: _pedidos_EBCI_.txt
+  Scanned 121809 lines
+
+========================================
+BATCH CREATING CUSTOMERS
+Unique customer IDs found: 32768
+========================================
+All customers already exist in database
+
+========================================
+PASS 2: LOADING ORDERS FILE BY FILE
+========================================
+
+Processing file: _pedidos_LATI_.txt (origin: LATI)
+  Parsed 11 orders from this file
+  Inserting 11 orders to database...
+Batch inserting 11 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 11 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 11 orders
+  Total so far: 11 orders
+
+Processing file: _pedidos_UMMS_.txt (origin: UMMS)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 21 orders
+  Total so far: 32 orders
+
+Processing file: _pedidos_LOWW_.txt (origin: LOWW)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 21 orders
+  Total so far: 53 orders
+
+Processing file: _pedidos_SCEL_.txt (origin: SCEL)
+  Parsed 15 orders from this file
+  Inserting 15 orders to database...
+Batch inserting 15 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 15 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 15 orders
+  Total so far: 68 orders
+
+Processing file: _pedidos_OSDI_.txt (origin: OSDI)
+  Parsed 6 orders from this file
+  Inserting 6 orders to database...
+Batch inserting 6 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 6 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 6 orders
+  Total so far: 74 orders
+
+Processing file: _pedidos_LBSF_.txt (origin: LBSF)
+  Parsed 18 orders from this file
+  Inserting 18 orders to database...
+Batch inserting 18 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 18 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 18 orders
+  Total so far: 92 orders
+
+Processing file: _pedidos_OERK_.txt (origin: OERK)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 21 orders
+  Total so far: 113 orders
+
+Processing file: _pedidos_EHAM_.txt (origin: EHAM)
+  Parsed 10 orders from this file
+  Inserting 10 orders to database...
+Batch inserting 10 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 10 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 10 orders
+  Total so far: 123 orders
+
+Processing file: _pedidos_OAKB_.txt (origin: OAKB)
+  Parsed 15 orders from this file
+  Inserting 15 orders to database...
+Batch inserting 15 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 15 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 15 orders
+  Total so far: 138 orders
+
+Processing file: _pedidos_OOMS_.txt (origin: OOMS)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 21 orders
+  Total so far: 159 orders
+
+Processing file: _pedidos_SKBO_.txt (origin: SKBO)
+  Parsed 12 orders from this file
+  Inserting 12 orders to database...
+Batch inserting 12 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 12 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 12 orders
+  Total so far: 171 orders
+
+Processing file: _pedidos_SBBR_.txt (origin: SBBR)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 21 orders
+  Total so far: 192 orders
+
+Processing file: _pedidos_SEQM_.txt (origin: SEQM)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 21 orders
+  Total so far: 213 orders
+
+Processing file: _pedidos_SGAS_.txt (origin: SGAS)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 21 orders
+  Total so far: 234 orders
+
+Processing file: _pedidos_VIDP_.txt (origin: VIDP)
+  Parsed 21 orders from this file
+  Inserting 21 orders to database...
+Batch inserting 21 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 21 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 21 orders
+  Total so far: 255 orders
+
+Processing file: _pedidos_OJAI_.txt (origin: OJAI)
+  Parsed 20 orders from this file
+  Inserting 20 orders to database...
+Batch inserting 20 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 20 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 20 orders
+  Total so far: 275 orders
+
+Processing file: _pedidos_LKPR_.txt (origin: LKPR)
+  Parsed 13 orders from this file
+  Inserting 13 orders to database...
+Batch inserting 13 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 13 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 13 orders
+  Total so far: 288 orders
+
+Processing file: _pedidos_SLLP_.txt (origin: SLLP)
+  Parsed 13 orders from this file
+  Inserting 13 orders to database...
+Batch inserting 13 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 13 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 13 orders
+  Total so far: 301 orders
+
+Processing file: _pedidos_OMDB_.txt (origin: OMDB)
+  Parsed 20 orders from this file
+  Inserting 20 orders to database...
+Batch inserting 20 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 20 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 20 orders
+  Total so far: 321 orders
+
+Processing file: _pedidos_SABE_.txt (origin: SABE)
+  Parsed 15 orders from this file
+  Inserting 15 orders to database...
+Batch inserting 15 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 15 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 15 orders
+  Total so far: 336 orders
+
+Processing file: _pedidos_OYSN_.txt (origin: OYSN)
+  Parsed 14 orders from this file
+  Inserting 14 orders to database...
+Batch inserting 14 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 14 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 14 orders
+  Total so far: 350 orders
+
+Processing file: _pedidos_LDZA_.txt (origin: LDZA)
+  Parsed 8 orders from this file
+  Inserting 8 orders to database...
+Batch inserting 8 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 8 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 8 orders
+  Total so far: 358 orders
+
+Processing file: _pedidos_EKCH_.txt (origin: EKCH)
+  Parsed 5 orders from this file
+  Inserting 5 orders to database...
+Batch inserting 5 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 5 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 5 orders
+  Total so far: 363 orders
+
+Processing file: _pedidos_SUAA_.txt (origin: SUAA)
+  Parsed 7 orders from this file
+  Inserting 7 orders to database...
+Batch inserting 7 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 7 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 7 orders
+  Total so far: 370 orders
+
+Processing file: _pedidos_SPIM_.txt (origin: SPIM)
+  Parsed 9 orders from this file
+  Inserting 9 orders to database...
+Batch inserting 9 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 9 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 9 orders
+  Total so far: 379 orders
+
+Processing file: _pedidos_SVMI_.txt (origin: SVMI)
+  Parsed 4 orders from this file
+  Inserting 4 orders to database...
+Batch inserting 4 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 4 orders to warehouse 5 (City ID: 5)
+  ✓ Inserted 4 orders
+  Total so far: 383 orders
+
+Processing file: _pedidos_UBBB_.txt (origin: UBBB)
+  Parsed 7 orders from this file
+  Inserting 7 orders to database...
+Batch inserting 7 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 7 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 7 orders
+  Total so far: 390 orders
+
+Processing file: _pedidos_EDDI_.txt (origin: EDDI)
+  Parsed 13 orders from this file
+  Inserting 13 orders to database...
+Batch inserting 13 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 13 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 13 orders
+  Total so far: 403 orders
+
+Processing file: _pedidos_OPKC_.txt (origin: OPKC)
+  Parsed 20 orders from this file
+  Inserting 20 orders to database...
+Batch inserting 20 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 20 orders to warehouse 29 (City ID: 29)
+  ✓ Inserted 20 orders
+  Total so far: 423 orders
+
+Processing file: _pedidos_EBCI_.txt (origin: EBCI)
+  Parsed 5 orders from this file
+  Inserting 5 orders to database...
+Batch inserting 5 orders using JPA saveAll...
+Updating initial warehouse capacities...
+Allocated 5 orders to warehouse 14 (City ID: 14)
+  ✓ Inserted 5 orders
+  Total so far: 428 orders
+
+========================================
+DATA LOAD COMPLETE
+Orders loaded: 428
+Orders created: 428
+Orders filtered: 4227288
+Customers created: 0
+Parse errors: 0
+Duration: 13 seconds
+========================================
+  New orders loaded: 428
+  Total orders in system: 428
+========================================
+ALNS SOLUTION - TIME WINDOW MODE
+Simulation Start: 2025-01-02T00:00
+Simulation End:   2025-01-06T00:00
+========================================
+[FACTORY] Creating data source for mode: DATABASE
+[FACTORY] Using DATABASE-based data source (PostgreSQL)
+[DATABASE] Database-based data source initialized
+[DATABASE] Using Spring Service layer (AirportService, FlightService, OrderService, ProductService)
+========================================
+DATA SOURCE: DATABASE
+========================================
+[DATABASE] Loading airports from PostgreSQL via AirportService...
+[DATABASE] Loaded 30 airports from database
+[DATABASE] Loading flights from PostgreSQL via FlightService...
+[DATABASE] Loaded 2866 flights from database
+Loading orders with time window filtering...
+[DATABASE] Loading orders with time window filtering from PostgreSQL
+[DATABASE] Time window: 2025-01-02T00:00 to 2025-01-06T00:00
+Loaded order: Order-VIDP-000000001-VIDP
+Loaded order: Order-VIDP-000000002-VIDP
+Loaded order: Order-VIDP-000000003-VIDP
+Loaded order: Order-VIDP-000000004-VIDP
+Loaded order: Order-VIDP-000000005-VIDP
+Loaded order: Order-VIDP-000000006-VIDP
+Loaded order: Order-VIDP-000000007-VIDP
+Loaded order: Order-VIDP-000000008-VIDP
+Loaded order: Order-VIDP-000000009-VIDP
+Loaded order: Order-VIDP-000000010-VIDP
+Loaded order: Order-VIDP-000000011-VIDP
+Loaded order: Order-VIDP-000000012-VIDP
+Loaded order: Order-VIDP-000000013-VIDP
+Loaded order: Order-VIDP-000000014-VIDP
+Loaded order: Order-VIDP-000000015-VIDP
+Loaded order: Order-VIDP-000000016-VIDP
+Loaded order: Order-VIDP-000000017-VIDP
+Loaded order: Order-VIDP-000000018-VIDP
+Loaded order: Order-VIDP-000000019-VIDP
+Loaded order: Order-VIDP-000000020-VIDP
+Loaded order: Order-VIDP-000000021-VIDP
+Loaded order: Order-OJAI-000000001-OJAI
+Loaded order: Order-OJAI-000000002-OJAI
+Loaded order: Order-OJAI-000000003-OJAI
+Loaded order: Order-OJAI-000000004-OJAI
+Loaded order: Order-OJAI-000000005-OJAI
+Loaded order: Order-OJAI-000000006-OJAI
+Loaded order: Order-OJAI-000000007-OJAI
+Loaded order: Order-OJAI-000000008-OJAI
+Loaded order: Order-OJAI-000000009-OJAI
+Loaded order: Order-OJAI-000000010-OJAI
+Loaded order: Order-OJAI-000000011-OJAI
+Loaded order: Order-OJAI-000000012-OJAI
+Loaded order: Order-OJAI-000000013-OJAI
+Loaded order: Order-OJAI-000000014-OJAI
+Loaded order: Order-OJAI-000000015-OJAI
+Loaded order: Order-OJAI-000000016-OJAI
+Loaded order: Order-OJAI-000000017-OJAI
+Loaded order: Order-OJAI-000000018-OJAI
+Loaded order: Order-OJAI-000000019-OJAI
+Loaded order: Order-OJAI-000000020-OJAI
+Loaded order: Order-LKPR-000000001-LKPR
+Loaded order: Order-LKPR-000000002-LKPR
+Loaded order: Order-LKPR-000000003-LKPR
+Loaded order: Order-LKPR-000000004-LKPR
+Loaded order: Order-LKPR-000000005-LKPR
+Loaded order: Order-LKPR-000000006-LKPR
+Loaded order: Order-LKPR-000000007-LKPR
+Loaded order: Order-LKPR-000000008-LKPR
+Loaded order: Order-LKPR-000000009-LKPR
+Loaded order: Order-LKPR-000000010-LKPR
+Loaded order: Order-LKPR-000000011-LKPR
+Loaded order: Order-LKPR-000000012-LKPR
+Loaded order: Order-LKPR-000000013-LKPR
+Loaded order: Order-SLLP-000000001-SLLP
+Loaded order: Order-SLLP-000000002-SLLP
+Loaded order: Order-SLLP-000000003-SLLP
+Loaded order: Order-SLLP-000000004-SLLP
+Loaded order: Order-SLLP-000000005-SLLP
+Loaded order: Order-SLLP-000000006-SLLP
+Loaded order: Order-SLLP-000000007-SLLP
+Loaded order: Order-SLLP-000000008-SLLP
+Loaded order: Order-SLLP-000000009-SLLP
+Loaded order: Order-SLLP-000000010-SLLP
+Loaded order: Order-SLLP-000000011-SLLP
+Loaded order: Order-SLLP-000000012-SLLP
+Loaded order: Order-SLLP-000000013-SLLP
+Loaded order: Order-OMDB-000000001-OMDB
+Loaded order: Order-OMDB-000000002-OMDB
+Loaded order: Order-OMDB-000000003-OMDB
+Loaded order: Order-OMDB-000000004-OMDB
+Loaded order: Order-OMDB-000000005-OMDB
+Loaded order: Order-OMDB-000000006-OMDB
+Loaded order: Order-OMDB-000000007-OMDB
+Loaded order: Order-OMDB-000000008-OMDB
+Loaded order: Order-OMDB-000000009-OMDB
+Loaded order: Order-OMDB-000000010-OMDB
+Loaded order: Order-OMDB-000000011-OMDB
+Loaded order: Order-OMDB-000000012-OMDB
+Loaded order: Order-OMDB-000000013-OMDB
+Loaded order: Order-OMDB-000000014-OMDB
+Loaded order: Order-OMDB-000000015-OMDB
+Loaded order: Order-OMDB-000000016-OMDB
+Loaded order: Order-OMDB-000000017-OMDB
+Loaded order: Order-OMDB-000000018-OMDB
+Loaded order: Order-OMDB-000000019-OMDB
+Loaded order: Order-OMDB-000000020-OMDB
+Loaded order: Order-SABE-000000001-SABE
+Loaded order: Order-SABE-000000002-SABE
+Loaded order: Order-SABE-000000003-SABE
+Loaded order: Order-SABE-000000004-SABE
+Loaded order: Order-SABE-000000005-SABE
+Loaded order: Order-SABE-000000006-SABE
+Loaded order: Order-SABE-000000007-SABE
+Loaded order: Order-SABE-000000008-SABE
+Loaded order: Order-SABE-000000009-SABE
+Loaded order: Order-SABE-000000010-SABE
+Loaded order: Order-SABE-000000011-SABE
+Loaded order: Order-SABE-000000012-SABE
+Loaded order: Order-SABE-000000013-SABE
+Loaded order: Order-SABE-000000014-SABE
+Loaded order: Order-SABE-000000015-SABE
+Loaded order: Order-OYSN-000000001-OYSN
+Loaded order: Order-OYSN-000000002-OYSN
+Loaded order: Order-OYSN-000000003-OYSN
+Loaded order: Order-OYSN-000000004-OYSN
+Loaded order: Order-OYSN-000000005-OYSN
+Loaded order: Order-OYSN-000000006-OYSN
+Loaded order: Order-OYSN-000000007-OYSN
+Loaded order: Order-OYSN-000000008-OYSN
+Loaded order: Order-OYSN-000000009-OYSN
+Loaded order: Order-OYSN-000000010-OYSN
+Loaded order: Order-OYSN-000000011-OYSN
+Loaded order: Order-OYSN-000000012-OYSN
+Loaded order: Order-OYSN-000000013-OYSN
+Loaded order: Order-OYSN-000000014-OYSN
+Loaded order: Order-LDZA-000000001-LDZA
+Loaded order: Order-LDZA-000000002-LDZA
+Loaded order: Order-LDZA-000000003-LDZA
+Loaded order: Order-LDZA-000000004-LDZA
+Loaded order: Order-LDZA-000000005-LDZA
+Loaded order: Order-LDZA-000000006-LDZA
+Loaded order: Order-LDZA-000000007-LDZA
+Loaded order: Order-LDZA-000000008-LDZA
+Loaded order: Order-EKCH-000000001-EKCH
+Loaded order: Order-EKCH-000000002-EKCH
+Loaded order: Order-EKCH-000000003-EKCH
+Loaded order: Order-EKCH-000000004-EKCH
+Loaded order: Order-EKCH-000000005-EKCH
+Loaded order: Order-SUAA-000000001-SUAA
+Loaded order: Order-SUAA-000000002-SUAA
+Loaded order: Order-SUAA-000000003-SUAA
+Loaded order: Order-SUAA-000000004-SUAA
+Loaded order: Order-SUAA-000000005-SUAA
+Loaded order: Order-SUAA-000000006-SUAA
+Loaded order: Order-SUAA-000000007-SUAA
+Loaded order: Order-SPIM-000000001-SPIM
+Loaded order: Order-SPIM-000000002-SPIM
+Loaded order: Order-SPIM-000000003-SPIM
+Loaded order: Order-SPIM-000000004-SPIM
+Loaded order: Order-SPIM-000000005-SPIM
+Loaded order: Order-SPIM-000000006-SPIM
+Loaded order: Order-SPIM-000000007-SPIM
+Loaded order: Order-SPIM-000000008-SPIM
+Loaded order: Order-SPIM-000000009-SPIM
+Loaded order: Order-SVMI-000000001-SVMI
+Loaded order: Order-SVMI-000000002-SVMI
+Loaded order: Order-SVMI-000000003-SVMI
+Loaded order: Order-SVMI-000000004-SVMI
+Loaded order: Order-UBBB-000000001-UBBB
+Loaded order: Order-UBBB-000000002-UBBB
+Loaded order: Order-UBBB-000000003-UBBB
+Loaded order: Order-UBBB-000000004-UBBB
+Loaded order: Order-UBBB-000000005-UBBB
+Loaded order: Order-UBBB-000000006-UBBB
+Loaded order: Order-UBBB-000000007-UBBB
+Loaded order: Order-EDDI-000000001-EDDI
+Loaded order: Order-EDDI-000000002-EDDI
+Loaded order: Order-EDDI-000000003-EDDI
+Loaded order: Order-EDDI-000000004-EDDI
+Loaded order: Order-EDDI-000000005-EDDI
+Loaded order: Order-EDDI-000000006-EDDI
+Loaded order: Order-EDDI-000000007-EDDI
+Loaded order: Order-EDDI-000000008-EDDI
+Loaded order: Order-EDDI-000000009-EDDI
+Loaded order: Order-EDDI-000000010-EDDI
+Loaded order: Order-EDDI-000000011-EDDI
+Loaded order: Order-EDDI-000000012-EDDI
+Loaded order: Order-EDDI-000000013-EDDI
+Loaded order: Order-OPKC-000000001-OPKC
+Loaded order: Order-OPKC-000000002-OPKC
+Loaded order: Order-OPKC-000000003-OPKC
+Loaded order: Order-OPKC-000000004-OPKC
+Loaded order: Order-OPKC-000000005-OPKC
+Loaded order: Order-OPKC-000000006-OPKC
+Loaded order: Order-OPKC-000000007-OPKC
+Loaded order: Order-OPKC-000000008-OPKC
+Loaded order: Order-OPKC-000000009-OPKC
+Loaded order: Order-OPKC-000000010-OPKC
+Loaded order: Order-OPKC-000000011-OPKC
+Loaded order: Order-OPKC-000000012-OPKC
+Loaded order: Order-OPKC-000000013-OPKC
+Loaded order: Order-OPKC-000000014-OPKC
+Loaded order: Order-OPKC-000000015-OPKC
+Loaded order: Order-OPKC-000000016-OPKC
+Loaded order: Order-OPKC-000000017-OPKC
+Loaded order: Order-OPKC-000000018-OPKC
+Loaded order: Order-OPKC-000000019-OPKC
+Loaded order: Order-OPKC-000000020-OPKC
+Loaded order: Order-EBCI-000000001-EBCI
+Loaded order: Order-EBCI-000000002-EBCI
+Loaded order: Order-EBCI-000000003-EBCI
+Loaded order: Order-EBCI-000000004-EBCI
+Loaded order: Order-EBCI-000000005-EBCI
+Loaded order: Order-LATI-000000001-LATI
+Loaded order: Order-LATI-000000002-LATI
+Loaded order: Order-LATI-000000003-LATI
+Loaded order: Order-LATI-000000004-LATI
+Loaded order: Order-LATI-000000005-LATI
+Loaded order: Order-LATI-000000006-LATI
+Loaded order: Order-LATI-000000007-LATI
+Loaded order: Order-LATI-000000008-LATI
+Loaded order: Order-LATI-000000009-LATI
+Loaded order: Order-LATI-000000010-LATI
+Loaded order: Order-LATI-000000011-LATI
+Loaded order: Order-UMMS-000000001-UMMS
+Loaded order: Order-UMMS-000000002-UMMS
+Loaded order: Order-UMMS-000000003-UMMS
+Loaded order: Order-UMMS-000000004-UMMS
+Loaded order: Order-UMMS-000000005-UMMS
+Loaded order: Order-UMMS-000000006-UMMS
+Loaded order: Order-UMMS-000000007-UMMS
+Loaded order: Order-UMMS-000000008-UMMS
+Loaded order: Order-UMMS-000000009-UMMS
+Loaded order: Order-UMMS-000000010-UMMS
+Loaded order: Order-UMMS-000000011-UMMS
+Loaded order: Order-UMMS-000000012-UMMS
+Loaded order: Order-UMMS-000000013-UMMS
+Loaded order: Order-UMMS-000000014-UMMS
+Loaded order: Order-UMMS-000000015-UMMS
+Loaded order: Order-UMMS-000000016-UMMS
+Loaded order: Order-UMMS-000000017-UMMS
+Loaded order: Order-UMMS-000000018-UMMS
+Loaded order: Order-UMMS-000000019-UMMS
+Loaded order: Order-UMMS-000000020-UMMS
+Loaded order: Order-UMMS-000000021-UMMS
+Loaded order: Order-LOWW-000000001-LOWW
+Loaded order: Order-LOWW-000000002-LOWW
+Loaded order: Order-LOWW-000000003-LOWW
+Loaded order: Order-LOWW-000000004-LOWW
+Loaded order: Order-LOWW-000000005-LOWW
+Loaded order: Order-LOWW-000000006-LOWW
+Loaded order: Order-LOWW-000000007-LOWW
+Loaded order: Order-LOWW-000000008-LOWW
+Loaded order: Order-LOWW-000000009-LOWW
+Loaded order: Order-LOWW-000000010-LOWW
+Loaded order: Order-LOWW-000000011-LOWW
+Loaded order: Order-LOWW-000000012-LOWW
+Loaded order: Order-LOWW-000000013-LOWW
+Loaded order: Order-LOWW-000000014-LOWW
+Loaded order: Order-LOWW-000000015-LOWW
+Loaded order: Order-LOWW-000000016-LOWW
+Loaded order: Order-LOWW-000000017-LOWW
+Loaded order: Order-LOWW-000000018-LOWW
+Loaded order: Order-LOWW-000000019-LOWW
+Loaded order: Order-LOWW-000000020-LOWW
+Loaded order: Order-LOWW-000000021-LOWW
+Loaded order: Order-SCEL-000000001-SCEL
+Loaded order: Order-SCEL-000000002-SCEL
+Loaded order: Order-SCEL-000000003-SCEL
+Loaded order: Order-SCEL-000000004-SCEL
+Loaded order: Order-SCEL-000000005-SCEL
+Loaded order: Order-SCEL-000000006-SCEL
+Loaded order: Order-SCEL-000000007-SCEL
+Loaded order: Order-SCEL-000000008-SCEL
+Loaded order: Order-OERK-000000001-OERK
+Loaded order: Order-OERK-000000002-OERK
+Loaded order: Order-OERK-000000003-OERK
+Loaded order: Order-OERK-000000004-OERK
+Loaded order: Order-OERK-000000005-OERK
+Loaded order: Order-OERK-000000006-OERK
+Loaded order: Order-OERK-000000007-OERK
+Loaded order: Order-OERK-000000008-OERK
+Loaded order: Order-OERK-000000009-OERK
+Loaded order: Order-OERK-000000010-OERK
+Loaded order: Order-OERK-000000011-OERK
+Loaded order: Order-OERK-000000012-OERK
+Loaded order: Order-OERK-000000013-OERK
+Loaded order: Order-OERK-000000014-OERK
+Loaded order: Order-OERK-000000015-OERK
+Loaded order: Order-OERK-000000016-OERK
+Loaded order: Order-OERK-000000017-OERK
+Loaded order: Order-OERK-000000018-OERK
+Loaded order: Order-OERK-000000019-OERK
+Loaded order: Order-OERK-000000020-OERK
+Loaded order: Order-OERK-000000021-OERK
+Loaded order: Order-EHAM-000000001-EHAM
+Loaded order: Order-EHAM-000000002-EHAM
+Loaded order: Order-EHAM-000000003-EHAM
+Loaded order: Order-EHAM-000000004-EHAM
+Loaded order: Order-EHAM-000000005-EHAM
+Loaded order: Order-EHAM-000000006-EHAM
+Loaded order: Order-EHAM-000000007-EHAM
+Loaded order: Order-SCEL-000000009-SCEL
+Loaded order: Order-SCEL-000000010-SCEL
+Loaded order: Order-SCEL-000000011-SCEL
+Loaded order: Order-SCEL-000000012-SCEL
+Loaded order: Order-SCEL-000000013-SCEL
+Loaded order: Order-SCEL-000000014-SCEL
+Loaded order: Order-SCEL-000000015-SCEL
+Loaded order: Order-OSDI-000000001-OSDI
+Loaded order: Order-OSDI-000000002-OSDI
+Loaded order: Order-OSDI-000000003-OSDI
+Loaded order: Order-OSDI-000000004-OSDI
+Loaded order: Order-OSDI-000000005-OSDI
+Loaded order: Order-OSDI-000000006-OSDI
+Loaded order: Order-LBSF-000000001-LBSF
+Loaded order: Order-LBSF-000000002-LBSF
+Loaded order: Order-LBSF-000000003-LBSF
+Loaded order: Order-LBSF-000000004-LBSF
+Loaded order: Order-LBSF-000000005-LBSF
+Loaded order: Order-LBSF-000000006-LBSF
+Loaded order: Order-LBSF-000000007-LBSF
+Loaded order: Order-LBSF-000000008-LBSF
+Loaded order: Order-LBSF-000000009-LBSF
+Loaded order: Order-LBSF-000000010-LBSF
+Loaded order: Order-LBSF-000000011-LBSF
+Loaded order: Order-LBSF-000000012-LBSF
+Loaded order: Order-LBSF-000000013-LBSF
+Loaded order: Order-LBSF-000000014-LBSF
+Loaded order: Order-LBSF-000000015-LBSF
+Loaded order: Order-LBSF-000000016-LBSF
+Loaded order: Order-LBSF-000000017-LBSF
+Loaded order: Order-LBSF-000000018-LBSF
+Loaded order: Order-EHAM-000000008-EHAM
+Loaded order: Order-EHAM-000000009-EHAM
+Loaded order: Order-EHAM-000000010-EHAM
+Loaded order: Order-OAKB-000000001-OAKB
+Loaded order: Order-OAKB-000000002-OAKB
+Loaded order: Order-SKBO-000000001-SKBO
+Loaded order: Order-SKBO-000000002-SKBO
+Loaded order: Order-SKBO-000000003-SKBO
+Loaded order: Order-SKBO-000000004-SKBO
+Loaded order: Order-SKBO-000000005-SKBO
+Loaded order: Order-SKBO-000000006-SKBO
+Loaded order: Order-SKBO-000000007-SKBO
+Loaded order: Order-SKBO-000000008-SKBO
+Loaded order: Order-SKBO-000000009-SKBO
+Loaded order: Order-SKBO-000000010-SKBO
+Loaded order: Order-SKBO-000000011-SKBO
+Loaded order: Order-SKBO-000000012-SKBO
+Loaded order: Order-SBBR-000000001-SBBR
+Loaded order: Order-SBBR-000000002-SBBR
+Loaded order: Order-SBBR-000000003-SBBR
+Loaded order: Order-SBBR-000000004-SBBR
+Loaded order: Order-SBBR-000000005-SBBR
+Loaded order: Order-SBBR-000000006-SBBR
+Loaded order: Order-SBBR-000000007-SBBR
+Loaded order: Order-SBBR-000000008-SBBR
+Loaded order: Order-SBBR-000000009-SBBR
+Loaded order: Order-SBBR-000000010-SBBR
+Loaded order: Order-SBBR-000000011-SBBR
+Loaded order: Order-OAKB-000000003-OAKB
+Loaded order: Order-OAKB-000000004-OAKB
+Loaded order: Order-OAKB-000000005-OAKB
+Loaded order: Order-OAKB-000000006-OAKB
+Loaded order: Order-OAKB-000000007-OAKB
+Loaded order: Order-OAKB-000000008-OAKB
+Loaded order: Order-OAKB-000000009-OAKB
+Loaded order: Order-OAKB-000000010-OAKB
+Loaded order: Order-OAKB-000000011-OAKB
+Loaded order: Order-OAKB-000000012-OAKB
+Loaded order: Order-OAKB-000000013-OAKB
+Loaded order: Order-OAKB-000000014-OAKB
+Loaded order: Order-OAKB-000000015-OAKB
+Loaded order: Order-OOMS-000000001-OOMS
+Loaded order: Order-OOMS-000000002-OOMS
+Loaded order: Order-OOMS-000000003-OOMS
+Loaded order: Order-OOMS-000000004-OOMS
+Loaded order: Order-OOMS-000000005-OOMS
+Loaded order: Order-OOMS-000000006-OOMS
+Loaded order: Order-OOMS-000000007-OOMS
+Loaded order: Order-OOMS-000000008-OOMS
+Loaded order: Order-OOMS-000000009-OOMS
+Loaded order: Order-OOMS-000000010-OOMS
+Loaded order: Order-OOMS-000000011-OOMS
+Loaded order: Order-OOMS-000000012-OOMS
+Loaded order: Order-OOMS-000000013-OOMS
+Loaded order: Order-OOMS-000000014-OOMS
+Loaded order: Order-OOMS-000000015-OOMS
+Loaded order: Order-OOMS-000000016-OOMS
+Loaded order: Order-OOMS-000000017-OOMS
+Loaded order: Order-OOMS-000000018-OOMS
+Loaded order: Order-OOMS-000000019-OOMS
+Loaded order: Order-OOMS-000000020-OOMS
+Loaded order: Order-OOMS-000000021-OOMS
+Loaded order: Order-SBBR-000000012-SBBR
+Loaded order: Order-SBBR-000000013-SBBR
+Loaded order: Order-SBBR-000000014-SBBR
+Loaded order: Order-SBBR-000000015-SBBR
+Loaded order: Order-SBBR-000000016-SBBR
+Loaded order: Order-SBBR-000000017-SBBR
+Loaded order: Order-SGAS-000000001-SGAS
+Loaded order: Order-SGAS-000000002-SGAS
+Loaded order: Order-SGAS-000000003-SGAS
+Loaded order: Order-SGAS-000000004-SGAS
+Loaded order: Order-SGAS-000000005-SGAS
+Loaded order: Order-SGAS-000000006-SGAS
+Loaded order: Order-SGAS-000000007-SGAS
+Loaded order: Order-SGAS-000000008-SGAS
+Loaded order: Order-SGAS-000000009-SGAS
+Loaded order: Order-SGAS-000000010-SGAS
+Loaded order: Order-SGAS-000000011-SGAS
+Loaded order: Order-SGAS-000000012-SGAS
+Loaded order: Order-SGAS-000000013-SGAS
+Loaded order: Order-SGAS-000000014-SGAS
+Loaded order: Order-SGAS-000000015-SGAS
+Loaded order: Order-SGAS-000000016-SGAS
+Loaded order: Order-SGAS-000000017-SGAS
+Loaded order: Order-SGAS-000000018-SGAS
+Loaded order: Order-SGAS-000000019-SGAS
+Loaded order: Order-SGAS-000000020-SGAS
+Loaded order: Order-SGAS-000000021-SGAS
+Loaded order: Order-SBBR-000000018-SBBR
+Loaded order: Order-SBBR-000000019-SBBR
+Loaded order: Order-SBBR-000000020-SBBR
+Loaded order: Order-SBBR-000000021-SBBR
+Loaded order: Order-SEQM-000000001-SEQM
+Loaded order: Order-SEQM-000000002-SEQM
+Loaded order: Order-SEQM-000000003-SEQM
+Loaded order: Order-SEQM-000000004-SEQM
+Loaded order: Order-SEQM-000000005-SEQM
+Loaded order: Order-SEQM-000000006-SEQM
+Loaded order: Order-SEQM-000000007-SEQM
+Loaded order: Order-SEQM-000000008-SEQM
+Loaded order: Order-SEQM-000000009-SEQM
+Loaded order: Order-SEQM-000000010-SEQM
+Loaded order: Order-SEQM-000000011-SEQM
+Loaded order: Order-SEQM-000000012-SEQM
+Loaded order: Order-SEQM-000000013-SEQM
+Loaded order: Order-SEQM-000000014-SEQM
+Loaded order: Order-SEQM-000000015-SEQM
+Loaded order: Order-SEQM-000000016-SEQM
+Loaded order: Order-SEQM-000000017-SEQM
+Loaded order: Order-SEQM-000000018-SEQM
+Loaded order: Order-SEQM-000000019-SEQM
+Loaded order: Order-SEQM-000000020-SEQM
+Loaded order: Order-SEQM-000000021-SEQM
+[DATABASE] ===== ORDER LOADING SUMMARY (INCREMENTAL) =====
+[DATABASE] Total orders in DB: 428
+[DATABASE] Orders LOADED (pending assignment): 428
+[DATABASE] Orders FILTERED by date: 0
+[DATABASE] Orders FILTERED (fully assigned): 0
+[DATABASE] Time window: 2025-01-02T00:00 to 2025-01-06T00:00
+[DATABASE] ==========================================
+UNITIZACIÓN APLICADA: 428 paquetes originales → 428 unidades de producto
+Order splits tracking initialized (for batch persistence)
+Cache inicializada: 30 ciudades
+T0 inicializado: 2025-01-02T00:00
+Inicializando RouteValidator (optimización O(1))...
+Inicializando ProductTracker (seguimiento de productos)...
+
+=== LOADING EXISTING DB STATE FOR INCREMENTAL SCHEDULING ===
+[DATABASE] Loading existing product assignments for re-run support...
+[DATABASE] Time window: 2025-01-02T00:00 to 2025-01-06T00:00
+[DATABASE] Loaded 0 existing product assignments
+[DATABASE] Skipped 0 products (unassigned or completed)
+[DATABASE] Flight instances with assignments: 0
+No existing assignments found - fresh run
+=============================================================
+
+Iniciando solución ALNS
+Lectura de aeropuertos
+Aeropuertos leídos: 30
+Lectura de vuelos
+Vuelos leídos: 2866
+Lectura de productos
+Productos leídos: 428
+
+=== GENERANDO SOLUCIÓN INICIAL ===
+=== GENERANDO SOLUCIÓN INICIAL GREEDY ===
+Estrategia de ordenamiento: Por deadline optimizado
+Iniciando algoritmo optimizado con 3 iteraciones...
+  Iteración 0 completada: 428 paquetes asignados
+Iteración 1 - Reasignación dinámica...
+  Iteración 1 completada: 0 paquetes asignados
+Initial solution generated: 428/428 orderSchemas assigned
+SolutionSchema weight: 3023747
+Validando solución...
+Solución válida: SÍ
+
+========== DESCRIPCIÓN DE LA SOLUCIÓN ==========
+Peso de la solución: 3023747
+Paquetes asignados: 428/428
+Productos transportados: 428/428
+
+----- Estadísticas de Rutas -----
+Rutas directas: 186 (43.5%)
+Rutas con 1 escala: 129 (30.1%)
+Rutas con 2 escalas: 92 (21.5%)
+Rutas en mismo continente: 428 (100.0%)
+Rutas entre continentes: 0 (0.0%)
+Entregas a tiempo: 428 (100.0% de asignados)
+Entregas a tiempo del total: 428/428 (100.0%)
+
+----- Ocupación de Almacenes -----
+Ocupación promedio de almacenes: 0.0%
+Almacenes llenos: 0/30
+
+----- Picos de Ocupación Temporal -----
+
+=== INICIANDO ALGORITMO ALNS ===
+Peso de solución inicial: 3023747
+ALNS Iteración 0/1000
+
+========================================
+¡EARLY STOPPING! Todos los paquetes asignados exitosamente
+Iteración: 4 / 1000
+Peso final: 3028830
+Total de órdenes: 428
+Mejoras realizadas: 1
+Tiempo total de ejecución: 145 ms (0.15 segundos)
+========================================
+
+ALNS completado:
+  Mejoras encontradas: 1
+  Peso final: 3028830
+  Diversificaciones extremas aplicadas: 0/3
+
+=== ACTUALIZANDO SEGUIMIENTO DE PRODUCTOS ===
+Productos rastreados: 428
+
+=== RESULTADO FINAL ALNS ===
+
+========== DESCRIPCIÓN DE LA SOLUCIÓN ==========
+Peso de la solución: 3028830
+Paquetes asignados: 428/428
+Productos transportados: 428/428
+
+----- Estadísticas de Rutas -----
+Rutas directas: 220 (51.4%)
+Rutas con 1 escala: 111 (25.9%)
+Rutas con 2 escalas: 76 (17.8%)
+Rutas en mismo continente: 428 (100.0%)
+Rutas entre continentes: 0 (0.0%)
+Entregas a tiempo: 428 (100.0% de asignados)
+Entregas a tiempo del total: 428/428 (100.0%)
+
+----- Ocupación de Almacenes -----
+Ocupación promedio de almacenes: 0.0%
+Almacenes llenos: 0/30
+
+----- Picos de Ocupación Temporal -----
+
+----- Rutas por Prioridad -----
+
+Paquete #1570693168 (Prioridad: 1.00, Deadline: 2025-01-04T00:00)
+  Origen: Lima (America)
+  Destino: Santiago-de-Chile (America)
+  Ruta (1 vuelos):
+    1. Lima → Santiago-de-Chile (7.1h, 6/340 paquetes)
+  Tiempo total estimado: 7.1h
+  Entrega a tiempo: SÍ
+
+Paquete #1571527316 (Prioridad: 1.00, Deadline: 2025-01-04T00:01)
+  Origen: Baku (Asia)
+  Destino: Kabul (Asia)
+  Ruta (1 vuelos):
+    1. Baku → Kabul (6.3h, 7/320 paquetes)
+  Tiempo total estimado: 6.3h
+  Entrega a tiempo: SÍ
+
+Paquete #1571734892 (Prioridad: 1.00, Deadline: 2025-01-04T00:46)
+  Origen: Lima (America)
+  Destino: Quito (America)
+  Ruta (1 vuelos):
+    1. Lima → Quito (3.7h, 12/320 paquetes)
+  Tiempo total estimado: 3.7h
+  Entrega a tiempo: SÍ
+
+Paquete #1571582093 (Prioridad: 1.00, Deadline: 2025-01-04T00:47)
+  Origen: Baku (Asia)
+  Destino: Mascate (Asia)
+  Ruta (1 vuelos):
+    1. Baku → Mascate (6.5h, 10/360 paquetes)
+  Tiempo total estimado: 6.5h
+  Entrega a tiempo: SÍ
+
+Paquete #1571674349 (Prioridad: 1.00, Deadline: 2025-01-04T00:49)
+  Origen: Lima (America)
+  Destino: Brasilia (America)
+  Ruta (3 vuelos):
+    1. Lima → Kabul (6.9h, 2/360 paquetes)
+    2. Kabul → Tirana (5.6h, 1/300 paquetes)
+    3. Tirana → Brasilia (8.6h, 1/360 paquetes)
+  Tiempo total estimado: 25.0h
+  Entrega a tiempo: SÍ
+
+Paquete #1591875530 (Prioridad: 1.00, Deadline: 2025-01-04T00:50)
+  Origen: Baku (Asia)
+  Destino: Delhi (Asia)
+  Ruta (1 vuelos):
+    1. Baku → Delhi (8.5h, 6/300 paquetes)
+  Tiempo total estimado: 8.5h
+  Entrega a tiempo: SÍ
+
+Paquete #1591936073 (Prioridad: 1.00, Deadline: 2025-01-04T00:50)
+  Origen: Baku (Asia)
+  Destino: Aman (Asia)
+  Ruta (1 vuelos):
+    1. Baku → Aman (5.1h, 13/300 paquetes)
+  Tiempo total estimado: 5.1h
+  Entrega a tiempo: SÍ
+
+Paquete #1570572082 (Prioridad: 1.00, Deadline: 2025-01-04T00:51)
+  Origen: Bruselas (Europa)
+  Destino: Minsk (Europa)
+  Ruta (2 vuelos):
+    1. Bruselas → Viena (2.1h, 10/360 paquetes)
+    2. Viena → Minsk (4.3h, 1/300 paquetes)
+  Tiempo total estimado: 8.4h
+  Entrega a tiempo: SÍ
+
+Paquete #1591814987 (Prioridad: 1.00, Deadline: 2025-01-04T00:51)
+  Origen: Lima (America)
+  Destino: Asunción (America)
+  Ruta (1 vuelos):
+    1. Lima → Asunción (6.2h, 9/360 paquetes)
+  Tiempo total estimado: 6.2h
+  Entrega a tiempo: SÍ
+
+Paquete #1570811371 (Prioridad: 1.00, Deadline: 2025-01-04T00:52)
+  Origen: Baku (Asia)
+  Destino: Riad (Asia)
+  Ruta (3 vuelos):
+    1. Baku → Amsterdam (5.7h, 2/340 paquetes)
+    2. Amsterdam → La-Paz (7.9h, 1/320 paquetes)
+    3. La-Paz → Riad (1.5h, 2/300 paquetes)
+  Tiempo total estimado: 19.1h
+  Entrega a tiempo: SÍ
+
+... y 418 paquetes más (use nivel de detalle 3 para ver todos)
+
+=================================================
+
+=== PRODUCT TRACKING SUMMARY ===
+Total Products: 428
+Assigned Products: 428
+Unassigned Products: 0
+Total Orders: 428
+Orders Fully Assigned: 428
+Orders Partially Assigned: 0
+Assignment Rate: 100.00%
+================================
+
+  [DEBUG] orderSplits null? false
+  [DEBUG] orderSplits size: 428
+  [DEBUG] Order Order-LOWW-000000012-LOWW has 1 splits
+    qty=1, hasRoute=true, instanceCount=3
+  [DEBUG] Order Order-LBSF-000000012-LBSF has 1 splits
+    qty=1, hasRoute=true, instanceCount=3
+  [DEBUG] Order Order-SCEL-000000010-SCEL has 1 splits
+    qty=1, hasRoute=true, instanceCount=1
+  Order splits stats: total=428, withInstances=407, instancesProcessed=720
+  Unique flight instances collected: 404
+  Sample instance: FL-25-DAY-1-2133 from SKBO to SLLP lat/lng: 4.7014/-74.1469
+========================================
+PERSISTING ALGORITHM SOLUTION WITH FLIGHT INSTANCES
+Total splits to persist: 428
+========================================
+Order Order-LBSF-000000012-LBSF: Preparing 1 product(s)
+Order Order-LOWW-000000012-LOWW: Preparing 1 product(s)
+Order Order-SCEL-000000010-SCEL: Preparing 1 product(s)
+Order Order-EDDI-000000002-EDDI: Preparing 1 product(s)
+Order Order-SKBO-000000008-SKBO: Preparing 1 product(s)
+... (suppressing further 'Preparing' logs) ...
+========================================
+BATCH INSERTING 428 PRODUCTS
+========================================
+Deallocating warehouse capacity for IN_TRANSIT products...
+========================================
+PERSISTENCE WITH FLIGHT INSTANCES COMPLETE
+Products created: 428
+Orders processed: 428
+========================================
+  Persisted 428 products to DB
+========================================
+SIMULATION TIME UPDATE
+Current simulation time: 2025-01-03T00:00
+========================================
+Active products to check: 407
+Simulation start date (DAY-0): 2025-01-02T00:00
+Product 9251: PENDING → IN_TRANSIT
+Product 9252: PENDING → ARRIVED
+Product 9258: PENDING → DELIVERED
+Product 9261: PENDING → IN_TRANSIT
+Product 9263: PENDING → IN_TRANSIT
+Product 9266: PENDING → IN_TRANSIT
+Product 9268: PENDING → IN_TRANSIT
+Product 9270: PENDING → IN_TRANSIT
+Product 9271: PENDING → IN_TRANSIT
+Product 9277: PENDING → IN_TRANSIT
+Product 9279: PENDING → IN_TRANSIT
+Product 9280: PENDING → DELIVERED
+Product 9282: PENDING → IN_TRANSIT
+Product 9284: PENDING → ARRIVED
+Product 9288: PENDING → IN_TRANSIT
+Product 9289: PENDING → IN_TRANSIT
+Product 9291: PENDING → DELIVERED
+Product 9293: PENDING → IN_TRANSIT
+Product 9294: PENDING → DELIVERED
+Product 9295: PENDING → DELIVERED
+Product 9297: PENDING → DELIVERED
+Product 9298: PENDING → IN_TRANSIT
+Product 9299: PENDING → DELIVERED
+Product 9303: PENDING → IN_TRANSIT
+Product 9304: PENDING → DELIVERED
+Product 9307: PENDING → IN_TRANSIT
+Product 9316: PENDING → IN_TRANSIT
+Product 9319: PENDING → IN_TRANSIT
+Product 9321: PENDING → IN_TRANSIT
+Product 9322: PENDING → DELIVERED
+Product 9323: PENDING → DELIVERED
+Product 9324: PENDING → IN_TRANSIT
+Product 9326: PENDING → DELIVERED
+Product 9327: PENDING → ARRIVED
+Product 9328: PENDING → IN_TRANSIT
+Product 9329: PENDING → DELIVERED
+Product 9335: PENDING → IN_TRANSIT
+Product 9346: PENDING → DELIVERED
+Product 9347: PENDING → DELIVERED
+Product 9348: PENDING → IN_TRANSIT
+Product 9349: PENDING → IN_TRANSIT
+Product 9350: PENDING → DELIVERED
+Product 9351: PENDING → IN_TRANSIT
+Product 9355: PENDING → DELIVERED
+Product 9356: PENDING → ARRIVED
+Product 9357: PENDING → IN_TRANSIT
+Product 9359: PENDING → DELIVERED
+Product 9360: PENDING → IN_TRANSIT
+Product 9361: PENDING → DELIVERED
+Product 9362: PENDING → DELIVERED
+Product 9364: PENDING → DELIVERED
+Product 9370: PENDING → ARRIVED
+Product 9382: PENDING → ARRIVED
+Product 9383: PENDING → IN_TRANSIT
+Product 9385: PENDING → IN_TRANSIT
+Product 9386: PENDING → IN_TRANSIT
+Product 9387: PENDING → IN_TRANSIT
+Product 9389: PENDING → DELIVERED
+Product 9391: PENDING → IN_TRANSIT
+Product 9394: PENDING → IN_TRANSIT
+Product 9398: PENDING → IN_TRANSIT
+Product 9401: PENDING → IN_TRANSIT
+Product 9402: PENDING → DELIVERED
+Product 9404: PENDING → IN_TRANSIT
+Product 9406: PENDING → IN_TRANSIT
+Product 9409: PENDING → ARRIVED
+Product 9410: PENDING → DELIVERED
+Product 9411: PENDING → ARRIVED
+Product 9415: PENDING → IN_TRANSIT
+Product 9418: PENDING → DELIVERED
+Product 9419: PENDING → DELIVERED
+Product 9422: PENDING → IN_TRANSIT
+Product 9423: PENDING → IN_TRANSIT
+Product 9426: PENDING → IN_TRANSIT
+Product 9427: PENDING → IN_TRANSIT
+Product 9432: PENDING → ARRIVED
+Product 9433: PENDING → DELIVERED
+Product 9434: PENDING → IN_TRANSIT
+Product 9435: PENDING → DELIVERED
+Product 9437: PENDING → IN_TRANSIT
+Product 9438: PENDING → DELIVERED
+Product 9440: PENDING → IN_TRANSIT
+Product 9441: PENDING → ARRIVED
+Product 9443: PENDING → ARRIVED
+Product 9444: PENDING → IN_TRANSIT
+Product 9445: PENDING → DELIVERED
+Product 9446: PENDING → IN_TRANSIT
+Product 9448: PENDING → DELIVERED
+Product 9451: PENDING → IN_TRANSIT
+Product 9455: PENDING → DELIVERED
+Product 9456: PENDING → DELIVERED
+Product 9458: PENDING → IN_TRANSIT
+Product 9459: PENDING → DELIVERED
+Product 9461: PENDING → IN_TRANSIT
+Product 9462: PENDING → DELIVERED
+Product 9463: PENDING → DELIVERED
+Product 9464: PENDING → IN_TRANSIT
+Product 9468: PENDING → IN_TRANSIT
+Product 9472: PENDING → DELIVERED
+Product 9473: PENDING → ARRIVED
+Product 9477: PENDING → ARRIVED
+Product 9478: PENDING → IN_TRANSIT
+Product 9480: PENDING → IN_TRANSIT
+Product 9483: PENDING → IN_TRANSIT
+Product 9484: PENDING → DELIVERED
+Product 9485: PENDING → IN_TRANSIT
+Product 9487: PENDING → DELIVERED
+Product 9489: PENDING → DELIVERED
+Product 9490: PENDING → IN_TRANSIT
+Product 9496: PENDING → DELIVERED
+Product 9497: PENDING → ARRIVED
+Product 9501: PENDING → ARRIVED
+Product 9505: PENDING → IN_TRANSIT
+Product 9506: PENDING → IN_TRANSIT
+Product 9508: PENDING → DELIVERED
+Product 9511: PENDING → IN_TRANSIT
+Product 9515: PENDING → IN_TRANSIT
+Product 9517: PENDING → IN_TRANSIT
+Product 9519: PENDING → IN_TRANSIT
+Product 9521: PENDING → IN_TRANSIT
+Product 9523: PENDING → IN_TRANSIT
+Product 9524: PENDING → ARRIVED
+Product 9531: PENDING → DELIVERED
+Product 9532: PENDING → DELIVERED
+Product 9533: PENDING → IN_TRANSIT
+Product 9535: PENDING → IN_TRANSIT
+Product 9541: PENDING → IN_TRANSIT
+Product 9542: PENDING → DELIVERED
+Product 9543: PENDING → IN_TRANSIT
+Product 9544: PENDING → IN_TRANSIT
+Product 9545: PENDING → IN_TRANSIT
+Product 9549: PENDING → DELIVERED
+Product 9550: PENDING → IN_TRANSIT
+Product 9551: PENDING → IN_TRANSIT
+Product 9553: PENDING → IN_TRANSIT
+Product 9556: PENDING → IN_TRANSIT
+Product 9557: PENDING → DELIVERED
+Product 9559: PENDING → IN_TRANSIT
+Product 9560: PENDING → IN_TRANSIT
+Product 9567: PENDING → IN_TRANSIT
+Product 9568: PENDING → IN_TRANSIT
+Product 9569: PENDING → IN_TRANSIT
+Product 9570: PENDING → DELIVERED
+Product 9571: PENDING → IN_TRANSIT
+Product 9574: PENDING → IN_TRANSIT
+Product 9575: PENDING → DELIVERED
+Product 9577: PENDING → IN_TRANSIT
+Product 9579: PENDING → IN_TRANSIT
+Product 9581: PENDING → IN_TRANSIT
+Product 9583: PENDING → IN_TRANSIT
+Product 9584: PENDING → ARRIVED
+Product 9585: PENDING → IN_TRANSIT
+Product 9586: PENDING → IN_TRANSIT
+Product 9587: PENDING → IN_TRANSIT
+Product 9589: PENDING → IN_TRANSIT
+Product 9590: PENDING → IN_TRANSIT
+Product 9591: PENDING → IN_TRANSIT
+Product 9592: PENDING → DELIVERED
+Product 9593: PENDING → IN_TRANSIT
+Product 9594: PENDING → IN_TRANSIT
+Product 9596: PENDING → IN_TRANSIT
+Product 9598: PENDING → IN_TRANSIT
+Product 9599: PENDING → IN_TRANSIT
+Product 9601: PENDING → DELIVERED
+Product 9602: PENDING → ARRIVED
+Product 9603: PENDING → IN_TRANSIT
+Product 9604: PENDING → DELIVERED
+Product 9606: PENDING → IN_TRANSIT
+Product 9608: PENDING → IN_TRANSIT
+Product 9609: PENDING → ARRIVED
+Product 9613: PENDING → DELIVERED
+Product 9616: PENDING → IN_TRANSIT
+Product 9620: PENDING → IN_TRANSIT
+Product 9621: PENDING → ARRIVED
+Product 9622: PENDING → DELIVERED
+Product 9626: PENDING → IN_TRANSIT
+Product 9628: PENDING → DELIVERED
+Product 9630: PENDING → IN_TRANSIT
+Product 9631: PENDING → IN_TRANSIT
+Product 9632: PENDING → IN_TRANSIT
+Product 9633: PENDING → DELIVERED
+Product 9637: PENDING → DELIVERED
+Product 9638: PENDING → IN_TRANSIT
+Product 9639: PENDING → IN_TRANSIT
+Product 9640: PENDING → DELIVERED
+Product 9644: PENDING → IN_TRANSIT
+Product 9647: PENDING → IN_TRANSIT
+Product 9650: PENDING → DELIVERED
+Product 9651: PENDING → ARRIVED
+Product 9652: PENDING → DELIVERED
+Product 9653: PENDING → IN_TRANSIT
+Product 9654: PENDING → IN_TRANSIT
+Product 9660: PENDING → DELIVERED
+Product 9662: PENDING → IN_TRANSIT
+Product 9663: PENDING → ARRIVED
+Product 9665: PENDING → IN_TRANSIT
+Product 9666: PENDING → IN_TRANSIT
+Product 9667: PENDING → DELIVERED
+Product 9669: PENDING → DELIVERED
+Product 9672: PENDING → IN_TRANSIT
+Product 9673: PENDING → IN_TRANSIT
+Product 9674: PENDING → IN_TRANSIT
+Product 9675: PENDING → IN_TRANSIT
+Product 9676: PENDING → IN_TRANSIT
+Product 9275: PENDING → IN_TRANSIT
+Product 9276: PENDING → IN_TRANSIT
+Product 9278: PENDING → DELIVERED
+Product 9281: PENDING → IN_TRANSIT
+Product 9325: PENDING → IN_TRANSIT
+Product 9342: PENDING → DELIVERED
+Product 9495: PENDING → IN_TRANSIT
+Product 9526: PENDING → DELIVERED
+Product 9552: PENDING → DELIVERED
+Product 9611: PENDING → DELIVERED
+Product 9664: PENDING → IN_TRANSIT
+Product 9285: PENDING → IN_TRANSIT
+Product 9300: PENDING → IN_TRANSIT
+Product 9301: PENDING → DELIVERED
+Product 9330: PENDING → IN_TRANSIT
+Product 9333: PENDING → IN_TRANSIT
+Product 9374: PENDING → IN_TRANSIT
+Product 9378: PENDING → IN_TRANSIT
+Product 9390: PENDING → IN_TRANSIT
+Product 9399: PENDING → IN_TRANSIT
+Product 9405: PENDING → IN_TRANSIT
+Product 9413: PENDING → IN_TRANSIT
+Product 9431: PENDING → IN_TRANSIT
+Product 9453: PENDING → DELIVERED
+Product 9481: PENDING → IN_TRANSIT
+Product 9262: PENDING → IN_TRANSIT
+Product 9272: PENDING → IN_TRANSIT
+Product 9292: PENDING → IN_TRANSIT
+Product 9313: PENDING → DELIVERED
+Product 9343: PENDING → IN_TRANSIT
+Product 9380: PENDING → IN_TRANSIT
+Product 9381: PENDING → IN_TRANSIT
+Product 9388: PENDING → IN_TRANSIT
+Product 9393: PENDING → IN_TRANSIT
+Product 9395: PENDING → IN_TRANSIT
+Batch updated 22 products to ARRIVED
+Batch updated 70 products to DELIVERED
+Batch updated 147 products to IN_TRANSIT
+Active orders to check: 407
+
+=== SIMULATION UPDATE COMPLETE ===
+State transitions:
+  PENDING → IN_TRANSIT: 147
+  IN_TRANSIT → ARRIVED: 0
+  ARRIVED → DELIVERED: 0
+Total transitions: 147
+==================================
+
+  State updates: PENDING->IN_TRANSIT=147, IN_TRANSIT->ARRIVED=0, ARRIVED->DELIVERED=0
+  Products total: 428
+  Assigned: 428
+  Unassigned (backlog): 0
+  Assignment rate: 100.0%
+  Flight instances used: 404
+2025-12-11T02:46:52.531-05:00  INFO 24954 --- [MoraPack] [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2025-12-11T02:46:52.537-05:00  INFO 24954 --- [MoraPack] [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete
+2025-12-11T02:46:52.600-05:00  WARN 24954 --- [MoraPack] [ionShutdownHook] o.s.b.f.support.DisposableBeanAdapter    : Invocation of destroy method failed on bean with name 'eventPublicationRegistry': org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.query.sqm.UnknownEntityException: Could not resolve root entity 'DefaultJpaEventPublication'
+2025-12-11T02:46:52.610-05:00  INFO 24954 --- [MoraPack] [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-12-11T02:46:52.615-05:00  WARN 24954 --- [MoraPack] [ionShutdownHook] o.s.b.f.support.DisposableBeanAdapter    : Invocation of destroy method failed on bean with name 'inMemoryDatabaseShutdownExecutor': org.springframework.boot.autoconfigure.jdbc.DataSourceProperties$DataSourceBeanCreationException: Failed to determine a suitable driver class
+2025-12-11T02:46:52.616-05:00  INFO 24954 --- [MoraPack] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2025-12-11T02:46:52.619-05:00  INFO 24954 --- [MoraPack] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

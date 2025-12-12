@@ -80,4 +80,52 @@ public class OrderQueryAPI {
                 ));
         }
     }
+
+    /**
+     * Get flight legs for a specific product (multi-hop routes)
+     *
+     * @param productId Product ID
+     * @return List of flight legs in sequence order
+     *
+     * Example: GET /api/query/products/198/flights
+     */
+    @GetMapping("/products/{productId}/flights")
+    public ResponseEntity<Map<String, Object>> getProductFlightLegs(@PathVariable Integer productId) {
+
+        try {
+            Map<String, Object> response = controller.getProductFlightLegs(productId);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of(
+                    "success", false,
+                    "message", "Failed to fetch flight legs: " + e.getMessage()
+                ));
+        }
+    }
+
+    /**
+     * Get all flight legs for an order (combines all products' routes)
+     *
+     * @param orderId Order ID
+     * @return List of unique flight legs across all products of the order
+     *
+     * Example: GET /api/query/orders/3/flights
+     */
+    @GetMapping("/orders/{orderId}/flights")
+    public ResponseEntity<Map<String, Object>> getOrderFlightLegs(@PathVariable Integer orderId) {
+
+        try {
+            Map<String, Object> response = controller.getOrderFlightLegs(orderId);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of(
+                    "success", false,
+                    "message", "Failed to fetch order flight legs: " + e.getMessage()
+                ));
+        }
+    }
 }

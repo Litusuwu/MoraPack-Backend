@@ -18,6 +18,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
@@ -33,6 +36,9 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class SimulationTimeService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final ProductService productService;
     private final OrderService orderService;
@@ -101,7 +107,12 @@ public class SimulationTimeService {
             }
         }
 
-        // Actualizar estados de órdenes
+        // IMPORTANT: Flush changes and clear the entity manager cache to ensure we get fresh data
+        // This is needed because batch updates bypass JPA entity tracking
+        productRepository.flush();
+        entityManager.clear();  // Clear first-level cache so orders reload with updated product statuses
+
+        // Actualizar estados de órdenes (must reload from DB after batch update)
         updateOrderStates();
 
         System.out.println("\n=== SIMULATION UPDATE COMPLETE ===");

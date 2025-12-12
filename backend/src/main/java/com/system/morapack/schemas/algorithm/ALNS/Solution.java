@@ -694,14 +694,28 @@ public class Solution {
             // Update day counter
             dayCounter = (int) ChronoUnit.DAYS.between(orderCreationTime.toLocalDate(), departureTime.toLocalDate());
 
-            // Handle null transport time
-            Double transportTimeDays = flight.getTransportTimeDays();
-            if (transportTimeDays == null || transportTimeDays <= 0) {
-                transportTimeDays = 0.5; // Default to 12 hours
+            // FIX: Calcular arrival time usando hora REAL del vuelo (igual que SimulationTimeService)
+            // ANTES: usaba transportTimeDays * 24 horas, causando inconsistencias
+            LocalTime flightArrivalTime = flight.getArrivalTime();
+            if (flightArrivalTime == null) {
+                // Fallback: usar transportTimeDays si no hay hora de llegada
+                Double transportTimeDays = flight.getTransportTimeDays();
+                if (transportTimeDays == null || transportTimeDays <= 0) {
+                    transportTimeDays = 0.5; // Default to 12 hours
+                }
+                long transportHours = (long) (transportTimeDays * 24);
+                flightArrivalTime = departureTime.plusHours(transportHours).toLocalTime();
             }
 
-            long transportHours = (long) (transportTimeDays * 24);
-            LocalDateTime arrivalTime = departureTime.plusHours(transportHours);
+            // Calcular arrival datetime considerando cruce de medianoche
+            LocalDateTime arrivalTime;
+            if (flightArrivalTime.isBefore(flightDepartureTime)) {
+                // Vuelo cruza medianoche: llega al día siguiente
+                arrivalTime = departureTime.plusDays(1).with(flightArrivalTime);
+            } else {
+                // Mismo día
+                arrivalTime = departureTime.with(flightArrivalTime);
+            }
 
             // Handle null max capacity
             Integer maxCapacity = flight.getMaxCapacity();

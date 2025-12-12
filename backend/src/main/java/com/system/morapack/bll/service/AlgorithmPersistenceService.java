@@ -376,10 +376,13 @@ public class AlgorithmPersistenceService {
                 }
                 product.setAssignedFlight(flightPath.toString());
 
-                // CRITICAL: Save the first flight instance ID (for re-run support)
+                // FIX: Save the LAST flight instance ID (for correct arrival time in multi-hop routes)
+                // ANTES: guardaba el primer vuelo, causando que SimulationTimeService calculara
+                // el arrival time del primer tramo en lugar del último (destino final)
                 if (!split.getAssignedFlightInstances().isEmpty()) {
-                    FlightInstanceSchema firstInstance = split.getAssignedFlightInstances().get(0);
-                    product.setAssignedFlightInstance(firstInstance.getInstanceId());
+                    FlightInstanceSchema lastInstance = split.getAssignedFlightInstances()
+                        .get(split.getAssignedFlightInstances().size() - 1);
+                    product.setAssignedFlightInstance(lastInstance.getInstanceId());
                 }
 
                 // Create ProductFlight records

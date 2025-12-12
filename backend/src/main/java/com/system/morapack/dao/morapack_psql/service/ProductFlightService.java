@@ -53,4 +53,28 @@ public class ProductFlightService {
     public List<Integer> getMultiHopProductIds() {
         return repository.findMultiHopProductIds();
     }
+
+    /**
+     * Count products per flight (from product_flights table)
+     * Returns Map of flightId -> productCount
+     */
+    public java.util.Map<Integer, Long> countProductsPerFlight() {
+        List<Object[]> results = repository.countProductsPerFlight();
+        java.util.Map<Integer, Long> countMap = new java.util.HashMap<>();
+        for (Object[] row : results) {
+            Integer flightId = (Integer) row[0];
+            Long count = (Long) row[1];
+            if (flightId != null) {
+                countMap.put(flightId, count);
+            }
+        }
+        return countMap;
+    }
+
+    /**
+     * Get all product flights with their flight and product data loaded
+     */
+    public List<ProductFlight> findAllWithFlightAndProduct() {
+        return repository.findAllWithFlightAndProduct();
+    }
 }

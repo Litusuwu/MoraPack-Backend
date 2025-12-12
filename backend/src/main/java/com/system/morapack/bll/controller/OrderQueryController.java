@@ -4,8 +4,10 @@ import com.system.morapack.bll.dto.OrderQueryDTO;
 import com.system.morapack.bll.dto.ProductWithOrderDTO;
 import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.Product;
+import com.system.morapack.dao.morapack_psql.model.ProductFlight;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
+import com.system.morapack.dao.morapack_psql.service.ProductFlightService;
 import com.system.morapack.schemas.PackageStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ public class OrderQueryController {
 
     private final OrderService orderService;
     private final ProductService productService;
+    private final ProductFlightService productFlightService;
 
     /**
      * Get orders within a specific time window
@@ -197,5 +200,99 @@ public class OrderQueryController {
         }
 
         return "";
+    }
+
+    /**
+     * Get all flight legs for a specific product (multi-hop routes)
+     * Returns flights in sequence order
+     */
+    public Map<String, Object> getProductFlightLegs(Integer productId) {
+        List<ProductFlight> productFlights = productFlightService.getFlightsForProduct(productId);
+
+        List<Map<String, Object>> flightLegs = productFlights.stream()
+            .map(pf -> {
+                Map<String, Object> leg = new HashMap<>();
+                leg.put("flightId", pf.getFlight().getId());
+                leg.put("flightCode", pf.getFlight().getCode());
+                leg.put("originAirportCode", pf.getFlight().getOriginAirport().getCodeIATA());
+                leg.put("destinationAirportCode", pf.getFlight().getDestinationAirport().getCodeIATA());
+                leg.put("sequenceOrder", pf.getSequenceOrder());
+                leg.put("departureTime", pf.getFlight().getDepartureTime() != null
+                    ? pf.getFlight().getDepartureTime().toString() : null);
+                leg.put("arrivalTime", pf.getFlight().getArrivalTime() != null
+                    ? pf.getFlight().getArrivalTime().toString() : null);
+                return leg;
+            })
+            .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("productId", productId);
+        response.put("flightLegs", flightLegs);
+        response.put("totalLegs", flightLegs.size());
+
+        return response;
+    }
+
+    /**
+     * Get all flight legs for multiple products of an order
+     * Returns a map of productId -> list of flight legs
+     */
+    public Map<String, Object> getOrderFlightLegs(Integer orderId) {
+        // Get all products for this order
+        List<Product> products = productService.fetchProducts(null).stream()
+            .filter(p -> p.getOrder().getId().equals(orderId))
+            .collect(Collectors.toList());
+
+        if (products.isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("orderId", orderId);
+            response.put("flightLegs", Collections.emptyList());
+            response.put("totalLegs", 0);
+            return response;
+        }
+
+        // Get product IDs
+        List<Integer> productIds = products.stream()
+            .map(Product::getId)
+            .collect(Collectors.toList());
+
+        // Get all flight legs for all products
+        List<ProductFlight> allProductFlights = productFlightService.getFlightsForProducts(productIds);
+
+        // Build unique flight legs (avoid duplicates if products share the same route)
+        Set<String> seenFlights = new HashSet<>();
+        List<Map<String, Object>> uniqueFlightLegs = new ArrayList<>();
+
+        for (ProductFlight pf : allProductFlights) {
+            String key = pf.getFlight().getId() + "-" + pf.getSequenceOrder();
+            if (!seenFlights.contains(key)) {
+                seenFlights.add(key);
+                Map<String, Object> leg = new HashMap<>();
+                leg.put("flightId", pf.getFlight().getId());
+                leg.put("flightCode", pf.getFlight().getCode());
+                leg.put("originAirportCode", pf.getFlight().getOriginAirport().getCodeIATA());
+                leg.put("destinationAirportCode", pf.getFlight().getDestinationAirport().getCodeIATA());
+                leg.put("sequenceOrder", pf.getSequenceOrder());
+                leg.put("departureTime", pf.getFlight().getDepartureTime() != null
+                    ? pf.getFlight().getDepartureTime().toString() : null);
+                leg.put("arrivalTime", pf.getFlight().getArrivalTime() != null
+                    ? pf.getFlight().getArrivalTime().toString() : null);
+                uniqueFlightLegs.add(leg);
+            }
+        }
+
+        // Sort by sequence order
+        uniqueFlightLegs.sort((a, b) ->
+            ((Integer) a.get("sequenceOrder")).compareTo((Integer) b.get("sequenceOrder")));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("orderId", orderId);
+        response.put("flightLegs", uniqueFlightLegs);
+        response.put("totalLegs", uniqueFlightLegs.size());
+
+        return response;
     }
 }
