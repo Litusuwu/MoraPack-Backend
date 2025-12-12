@@ -6,9 +6,11 @@ import com.system.morapack.bll.dto.ProductWithOrderDTO;
 import com.system.morapack.dao.morapack_psql.model.Flight;
 import com.system.morapack.dao.morapack_psql.model.Order;
 import com.system.morapack.dao.morapack_psql.model.Product;
+import com.system.morapack.dao.morapack_psql.model.ProductFlight;
 import com.system.morapack.dao.morapack_psql.service.FlightService;
 import com.system.morapack.dao.morapack_psql.service.OrderService;
 import com.system.morapack.dao.morapack_psql.service.ProductService;
+import com.system.morapack.dao.morapack_psql.service.ProductFlightService;
 import com.system.morapack.schemas.PackageStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class FlightQueryController {
     private final FlightService flightService;
     private final ProductService productService;
     private final OrderService orderService;
+    private final ProductFlightService productFlightService;
 
     /**
      * Get all flights with their current status and utilization
@@ -88,21 +91,101 @@ public class FlightQueryController {
      * Get all flight instances that have products assigned
      * Returns the actual instance IDs like "FL-123-DAY-0-0800" with product counts
      * This is used for accurate visualization - only show loaded planes for correct instances
+     *
+     * This method uses the assignedFlightInstance field from products to determine
+     * the correct DAY for each product, then generates instanceIds for ALL flights
+     * in the product's route (from product_flights table) for that same day.
      */
     public Map<String, Object> getAssignedFlightInstances() {
-        Map<String, Long> instanceCounts = productService.getProductCountPerFlightInstance();
-        
+        // Step 1: Get all products with their assigned flight instances
+        List<Product> allProducts = productService.fetchProducts(null);
+
+        // Step 2: For each product, extract the DAY from its assignedFlightInstance
+        // and generate instanceIds for ALL flights in its route
+        Map<String, Long> instanceCounts = new HashMap<>();
+
+        for (Product product : allProducts) {
+            String assignedInstance = product.getAssignedFlightInstance();
+            if (assignedInstance == null || assignedInstance.isEmpty()) {
+                continue;
+            }
+
+            // Parse the day from assignedFlightInstance: "FL-{flightId}-DAY-{day}-{HHMM}"
+            Integer dayNumber = extractDayFromInstanceId(assignedInstance);
+            if (dayNumber == null) {
+                // Fallback: just count the assignedFlightInstance as-is
+                instanceCounts.merge(assignedInstance, 1L, Long::sum);
+                continue;
+            }
+
+            // Get all flights in this product's route from product_flights table
+            List<ProductFlight> productFlights = productFlightService.getFlightsForProduct(product.getId());
+
+            if (productFlights.isEmpty()) {
+                // No multi-hop data, just use the assignedFlightInstance
+                instanceCounts.merge(assignedInstance, 1L, Long::sum);
+            } else {
+                // Generate instanceId for each flight in the route, using the same day
+                for (ProductFlight pf : productFlights) {
+                    Flight flight = pf.getFlight();
+                    if (flight != null && flight.getDepartureTime() != null) {
+                        String hhmm = formatTimeAsHHMM(flight.getDepartureTime().toString());
+                        String instanceId = String.format("FL-%d-DAY-%d-%s",
+                            flight.getId(), dayNumber, hhmm);
+                        instanceCounts.merge(instanceId, 1L, Long::sum);
+                    }
+                }
+            }
+        }
+
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("totalInstances", instanceCounts.size());
         response.put("instances", instanceCounts);
-        
+
         return response;
+    }
+
+    /**
+     * Extract the day number from an instanceId like "FL-123-DAY-2-0800"
+     * Returns null if parsing fails
+     */
+    private Integer extractDayFromInstanceId(String instanceId) {
+        if (instanceId == null || !instanceId.startsWith("FL-")) {
+            return null;
+        }
+        try {
+            // Format: FL-{flightId}-DAY-{day}-{HHMM}
+            String[] parts = instanceId.split("-");
+            if (parts.length >= 4 && "DAY".equals(parts[2])) {
+                return Integer.parseInt(parts[3]);
+            }
+        } catch (NumberFormatException e) {
+            // Ignore parsing errors
+        }
+        return null;
+    }
+
+    /**
+     * Format a time string as HHMM (e.g., "08:30:00" -> "0830")
+     */
+    private String formatTimeAsHHMM(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) {
+            return "0000";
+        }
+        if (timeStr.contains(":")) {
+            String[] parts = timeStr.split(":");
+            return String.format("%02d%02d",
+                Integer.parseInt(parts[0]),
+                Integer.parseInt(parts[1]));
+        }
+        return "0000";
     }
 
     /**
      * Get orders assigned to a specific flight
      * Used when user clicks on a flight in the map
+     * Updated to use product_flights table to find ALL orders using this flight
      */
     public Map<String, Object> getOrdersForFlight(String flightCode) {
         // Find flight by code
@@ -114,10 +197,11 @@ public class FlightQueryController {
             return error;
         }
 
-        // Get all products assigned to this flight
-        List<Product> products = productService.fetchProducts(null).stream()
-            .filter(p -> p.getAssignedFlightInstance() != null &&
-                         extractFlightCodeFromInstance(p).equals(flightCode))
+        // Get all products using this flight from product_flights table
+        List<ProductFlight> productFlights = productFlightService.getProductsUsingFlight(flight.getId());
+        List<Product> products = productFlights.stream()
+            .map(ProductFlight::getProduct)
+            .distinct()
             .collect(Collectors.toList());
 
         // Group products by order
@@ -176,6 +260,8 @@ public class FlightQueryController {
 
     /**
      * Get products assigned to a specific flight
+     * Updated to use product_flights table to find ALL products using this flight
+     * (not just products where this is the final/assigned flight)
      */
     public Map<String, Object> getProductsForFlight(String flightCode) {
         // Find flight by code
@@ -187,10 +273,11 @@ public class FlightQueryController {
             return error;
         }
 
-        // Get all products assigned to this flight
-        List<Product> products = productService.fetchProducts(null).stream()
-            .filter(p -> p.getAssignedFlightInstance() != null &&
-                         extractFlightCodeFromInstance(p).equals(flightCode))
+        // Get all products using this flight from product_flights table
+        List<ProductFlight> productFlights = productFlightService.getProductsUsingFlight(flight.getId());
+        List<Product> products = productFlights.stream()
+            .map(ProductFlight::getProduct)
+            .distinct()
             .collect(Collectors.toList());
 
         // Build ProductWithOrderDTO for each product

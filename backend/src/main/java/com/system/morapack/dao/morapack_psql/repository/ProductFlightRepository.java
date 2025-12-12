@@ -37,4 +37,17 @@ public interface ProductFlightRepository extends JpaRepository<ProductFlight, In
            "GROUP BY pf.product.id " +
            "HAVING COUNT(pf) > 1")
     List<Integer> findMultiHopProductIds();
+
+    /**
+     * Count products per flight (for all flights in routes, not just the last one)
+     * Returns flight_id and count of products using that flight
+     */
+    @Query("SELECT pf.flight.id, COUNT(pf.product.id) FROM ProductFlight pf GROUP BY pf.flight.id")
+    List<Object[]> countProductsPerFlight();
+
+    /**
+     * Get all product flights (for generating instanceIds)
+     */
+    @Query("SELECT pf FROM ProductFlight pf JOIN FETCH pf.flight JOIN FETCH pf.product")
+    List<ProductFlight> findAllWithFlightAndProduct();
 }
