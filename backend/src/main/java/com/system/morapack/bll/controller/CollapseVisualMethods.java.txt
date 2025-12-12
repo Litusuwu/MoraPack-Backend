@@ -1,0 +1,261 @@
+
+  // ==================== COLLAPSE VISUAL SIMULATION STATE ====================
+  // These track state across multiple calls to executeCollapseVisualDay()
+  // Thread safety note: assumes single simulation at a time per server instance
+  
+  private volatile boolean collapseVisualInitialized = false;
+  private volatile LocalDateTime collapseVisualSimStart = null;
+  private volatile int collapseVisualTotalOrdersLoaded = 0;
+  private volatile int collapseVisualPreviousBacklog = 0;
+  private volatile int collapseVisualConsecutiveGrowingDays = 0;
+  
+  // Collapse thresholds for visual mode (same as batch)
+  private static final double COLLAPSE_THRESHOLD_PERCENT_VISUAL = 10.0;
+  private static final int MAX_GROWING_BACKLOG_DAYS_VISUAL = 5;
+  private static final int MAX_SIMULATION_DAYS_VISUAL = 365;
+
+  // ==================== COLLAPSE VISUAL METHODS ====================
+
+  /**
+   * Initialize the visual collapse simulation
+   * Must be called ONCE before the first call to executeCollapseVisualDay()
+   * Clears database and resets all state
+   * 
+   * @param simulationStartTime The start time for simulation (default: 2025-01-02T00:00:00)
+   * @return Success status
+   */
+  public CollapseVisualDayResultSchema initCollapseVisualSimulation(LocalDateTime simulationStartTime) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    try {
+      System.out.println("===========================================");
+      System.out.println("INITIALIZING COLLAPSE VISUAL SIMULATION");
+      System.out.println("Start time: " + simulationStartTime);
+      System.out.println("===========================================");
+      
+      // Clear existing data
+      dataLoadService.clearAllOrders();
+      System.out.println("Database cleared successfully");
+      
+      // Reset state
+      collapseVisualSimStart = simulationStartTime;
+      collapseVisualTotalOrdersLoaded = 0;
+      collapseVisualPreviousBacklog = 0;
+      collapseVisualConsecutiveGrowingDays = 0;
+      collapseVisualInitialized = true;
+      
+      // Load first day's orders
+      int ordersLoadedDay1 = dataLoadService.loadOrdersForDay(simulationStartTime, 1);
+      collapseVisualTotalOrdersLoaded = ordersLoadedDay1;
+      
+      System.out.println("Loaded " + ordersLoadedDay1 + " orders for day 1");
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message("Simulation initialized. " + ordersLoadedDay1 + " orders loaded for day 1.")
+          .dayNumber(0)
+          .hasReachedCollapse(false)
+          .continueSimulation(true)
+          .totalOrdersLoaded(ordersLoadedDay1)
+          .backlogSize(0)
+          .statusLabel("INITIALIZED")
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! Initialization failed: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Initialization failed: " + e.getMessage())
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Execute ONE day of visual collapse simulation
+   * 
+   * This method:
+   * 1. Loads orders for the current day from file
+   * 2. Runs ALNS algorithm
+   * 3. Persists assignments to DB
+   * 4. Calculates collapse metrics
+   * 5. Returns immediately for frontend to animate
+   * 
+   * @param dayNumber The day to process (1, 2, 3...)
+   * @return Result with metrics and collapse status
+   */
+  public CollapseVisualDayResultSchema executeCollapseVisualDay(int dayNumber) {
+    LocalDateTime executionStart = LocalDateTime.now();
+    
+    if (!collapseVisualInitialized || collapseVisualSimStart == null) {
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Simulation not initialized. Call initCollapseVisualSimulation first.")
+          .continueSimulation(false)
+          .statusLabel("NOT_INITIALIZED")
+          .build();
+    }
+    
+    try {
+      System.out.println("\n--- Processing Day " + dayNumber + " ---");
+      
+      LocalDateTime dayStart = collapseVisualSimStart.plusDays(dayNumber - 1);
+      LocalDateTime dayEnd = dayStart.plusDays(1);
+      
+      // Load orders for this day (if not day 1, which was loaded in init)
+      int ordersLoadedToday = 0;
+      if (dayNumber > 1) {
+        ordersLoadedToday = dataLoadService.loadOrdersForDay(dayStart, dayNumber);
+        collapseVisualTotalOrdersLoaded += ordersLoadedToday;
+      }
+      
+      System.out.println("Orders loaded today: " + ordersLoadedToday);
+      System.out.println("Total orders loaded: " + collapseVisualTotalOrdersLoaded);
+      
+      // Run ALNS algorithm
+      Solution solution = executeCollapseScenarioDay(dayStart, dayEnd);
+      
+      // Get metrics from solution
+      int assignedToday = 0;
+      int unassignedToday = 0;
+      double slaCompliance = 100.0;
+      
+      if (solution != null && solution.getSlaMetrics() != null) {
+        Solution.SLAMetrics metrics = solution.getSlaMetrics();
+        assignedToday = metrics.getAssignedProducts();
+        unassignedToday = metrics.getUnassignedProducts();
+        
+        int total = assignedToday + unassignedToday;
+        if (total > 0) {
+          slaCompliance = (assignedToday * 100.0) / total;
+        }
+      }
+      
+      // Calculate backlog
+      int currentBacklog = unassignedToday;
+      
+      // Check if backlog is growing
+      boolean backlogGrowing = currentBacklog > collapseVisualPreviousBacklog;
+      if (backlogGrowing) {
+        collapseVisualConsecutiveGrowingDays++;
+      } else {
+        collapseVisualConsecutiveGrowingDays = 0;
+      }
+      
+      int previousBacklog = collapseVisualPreviousBacklog;
+      collapseVisualPreviousBacklog = currentBacklog;
+      
+      // Calculate unassigned rate
+      int totalProducts = assignedToday + unassignedToday;
+      double unassignedRate = totalProducts > 0 
+          ? (unassignedToday * 100.0) / totalProducts 
+          : 0.0;
+      
+      // Check collapse conditions
+      boolean hasCollapsed = false;
+      String collapseReason = null;
+      
+      if (unassignedRate > COLLAPSE_THRESHOLD_PERCENT_VISUAL) {
+        hasCollapsed = true;
+        collapseReason = String.format("Unassigned rate %.1f%% exceeded threshold %.1f%%",
+            unassignedRate, COLLAPSE_THRESHOLD_PERCENT_VISUAL);
+      } else if (collapseVisualConsecutiveGrowingDays >= MAX_GROWING_BACKLOG_DAYS_VISUAL) {
+        hasCollapsed = true;
+        collapseReason = String.format("Backlog grew for %d consecutive days",
+            collapseVisualConsecutiveGrowingDays);
+      }
+      
+      // Determine status label and collapse progress
+      String statusLabel;
+      int collapseProgress;
+      double assignmentRate = 100.0 - unassignedRate;
+      
+      if (hasCollapsed) {
+        statusLabel = "COLLAPSED";
+        collapseProgress = 100;
+      } else if (unassignedRate > 7.0 || collapseVisualConsecutiveGrowingDays >= 3) {
+        statusLabel = "CRITICAL";
+        collapseProgress = 80;
+      } else if (unassignedRate > 4.0 || collapseVisualConsecutiveGrowingDays >= 2) {
+        statusLabel = "WARNING";
+        collapseProgress = 50;
+      } else if (unassignedRate > 1.0 || backlogGrowing) {
+        statusLabel = "CAUTION";
+        collapseProgress = 25;
+      } else {
+        statusLabel = "HEALTHY";
+        collapseProgress = 0;
+      }
+      
+      // Check max days
+      boolean continueSimulation = !hasCollapsed && dayNumber < MAX_SIMULATION_DAYS_VISUAL;
+      
+      LocalDateTime executionEnd = LocalDateTime.now();
+      
+      System.out.println("Day " + dayNumber + " complete:");
+      System.out.println("  Assigned: " + assignedToday);
+      System.out.println("  Unassigned: " + unassignedToday);
+      System.out.println("  Backlog: " + currentBacklog);
+      System.out.println("  Status: " + statusLabel);
+      System.out.println("  Collapsed: " + hasCollapsed);
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(true)
+          .message(hasCollapsed ? "COLLAPSE: " + collapseReason : "Day " + dayNumber + " processed")
+          .dayNumber(dayNumber)
+          .hasReachedCollapse(hasCollapsed)
+          .collapseReason(collapseReason)
+          .continueSimulation(continueSimulation)
+          .totalOrdersLoaded(collapseVisualTotalOrdersLoaded)
+          .ordersLoadedToday(ordersLoadedToday)
+          .assignedToday(assignedToday)
+          .unassignedToday(unassignedToday)
+          .backlogSize(currentBacklog)
+          .unassignedPercentage(unassignedRate)
+          .slaComplianceToday(assignmentRate)
+          .previousDayBacklog(previousBacklog)
+          .consecutiveGrowingDays(collapseVisualConsecutiveGrowingDays)
+          .backlogIsGrowing(backlogGrowing)
+          .executionStartTime(executionStart)
+          .executionEndTime(executionEnd)
+          .executionTimeMs(ChronoUnit.MILLIS.between(executionStart, executionEnd))
+          .collapseProgress(collapseProgress)
+          .statusLabel(statusLabel)
+          .build();
+          
+    } catch (Exception e) {
+      System.out.println("!!! Day " + dayNumber + " failed: " + e.getMessage());
+      e.printStackTrace();
+      
+      return CollapseVisualDayResultSchema.builder()
+          .success(false)
+          .message("Day " + dayNumber + " failed: " + e.getMessage())
+          .dayNumber(dayNumber)
+          .hasReachedCollapse(true)
+          .collapseReason("ERROR")
+          .continueSimulation(false)
+          .statusLabel("ERROR")
+          .build();
+    }
+  }
+
+  /**
+   * Reset the visual collapse simulation state
+   * Can be called to start over without restarting the server
+   */
+  public void resetCollapseVisualSimulation() {
+    collapseVisualInitialized = false;
+    collapseVisualSimStart = null;
+    collapseVisualTotalOrdersLoaded = 0;
+    collapseVisualPreviousBacklog = 0;
+    collapseVisualConsecutiveGrowingDays = 0;
+    System.out.println("Collapse visual simulation state reset");
+  }

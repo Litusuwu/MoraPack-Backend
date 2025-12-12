@@ -38,4 +38,10 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
   @Modifying
   @Query(value = "DELETE FROM orders", nativeQuery = true)
   void deleteAllNative();
+  
+  // Batch update status for multiple orders at once (prevents deadlocks)
+  @Modifying
+  @Query("UPDATE Order o SET o.status = :status, o.updatedAt = CURRENT_TIMESTAMP WHERE o.id IN :ids")
+  void batchUpdateStatus(@org.springframework.data.repository.query.Param("status") PackageStatus status, 
+                         @org.springframework.data.repository.query.Param("ids") List<Integer> ids);
 }

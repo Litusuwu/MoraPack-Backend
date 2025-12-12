@@ -133,29 +133,22 @@ public class DatabaseInputDataSource implements InputDataSource {
         System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
 
         // Fetch all orders and filter by creation date
-        // TODO: Optimize by adding query method to OrderService that filters by date range
         List<Order> allOrders = orderService.fetchOrders(null);
         ArrayList<OrderSchema> orderSchemas = new ArrayList<>();
 
-        int filteredCount = 0;
+        int filteredByDate = 0;
+        int filteredByFullyAssigned = 0;
 
         for (Order order : allOrders) {
             // Filter by creation date (order date)
-            // WORKAROUND: If creationDate is not properly set (e.g., set to DB insertion time),
-            // calculate approximate order date from delivery date
             LocalDateTime orderDate;
             if (order.getCreationDate() != null) {
                 LocalDateTime creationDate = order.getCreationDate();
                 LocalDateTime deliveryDate = order.getDeliveryDate();
 
                 // Check if creationDate looks like a DB timestamp (after delivery date)
-                // This indicates creationDate was auto-set during import, not from file
                 if (creationDate.isAfter(deliveryDate)) {
-                    // Calculate order date from delivery date (typically order_date + 2-3 days = delivery_date)
-                    // Use conservative estimate: delivery_date - 3 days
                     orderDate = deliveryDate.minusDays(3);
-                    System.out.println("[DATABASE] Warning: Order " + order.getName() +
-                                     " has creationDate after deliveryDate. Using calculated orderDate: " + orderDate);
                 } else {
                     orderDate = creationDate;
                 }
@@ -165,7 +158,14 @@ public class DatabaseInputDataSource implements InputDataSource {
 
             // Skip orders outside simulation time window
             if (orderDate.isBefore(simulationStartTime) || orderDate.isAfter(simulationEndTime)) {
-                filteredCount++;
+                filteredByDate++;
+                continue;
+            }
+            
+            // INCREMENTAL: Skip orders where ALL products are already assigned to flights
+            // This prevents re-processing orders that were fully assigned in previous days
+            if (isOrderFullyAssigned(order)) {
+                filteredByFullyAssigned++;
                 continue;
             }
 
@@ -175,13 +175,45 @@ public class DatabaseInputDataSource implements InputDataSource {
             }
         }
 
-        System.out.println("[DATABASE] ===== ORDER LOADING SUMMARY =====");
+        System.out.println("[DATABASE] ===== ORDER LOADING SUMMARY (INCREMENTAL) =====");
         System.out.println("[DATABASE] Total orders in DB: " + allOrders.size());
-        System.out.println("[DATABASE] Orders LOADED (within time window): " + orderSchemas.size());
-        System.out.println("[DATABASE] Orders FILTERED (outside time window): " + filteredCount);
+        System.out.println("[DATABASE] Orders LOADED (pending assignment): " + orderSchemas.size());
+        System.out.println("[DATABASE] Orders FILTERED by date: " + filteredByDate);
+        System.out.println("[DATABASE] Orders FILTERED (fully assigned): " + filteredByFullyAssigned);
         System.out.println("[DATABASE] Time window: " + simulationStartTime + " to " + simulationEndTime);
         System.out.println("[DATABASE] ==========================================");
         return orderSchemas;
+    }
+    
+    /**
+     * Check if all products in an order have been assigned to flights.
+     * An order is fully assigned if ALL its products have a non-empty assignedFlight field.
+     * This enables incremental processing - we skip orders that were already processed.
+     */
+    private boolean isOrderFullyAssigned(Order order) {
+        List<Product> products = order.getProducts();
+        if (products == null || products.isEmpty()) {
+            return false; // No products = not assigned
+        }
+        
+        for (Product product : products) {
+            // FIX: If product is DELIVERED, it is fully processed (even if assignedFlight is empty for local delivery)
+            if (product.getStatus() == com.system.morapack.schemas.PackageStatus.DELIVERED) {
+                continue;
+            }
+
+            // If any product is missing assigned flight, order needs processing
+            if (product.getAssignedFlight() == null || product.getAssignedFlight().trim().isEmpty()) {
+                return false;
+            }
+            // Also check if product is still PENDING without assignment
+            if (product.getStatus() == com.system.morapack.schemas.PackageStatus.PENDING &&
+                (product.getAssignedFlightInstance() == null || product.getAssignedFlightInstance().trim().isEmpty())) {
+                return false;
+            }
+        }
+        
+        return true; // All products have flights assigned
     }
 
     @Override
